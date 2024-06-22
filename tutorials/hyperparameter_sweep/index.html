@@ -1,0 +1,2142 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A collection of objects and functions to work with calling cards sequencing tools">
+      
+      
+        <meta name="author" content="ben mueller <email@email.com>, chase mateusiak <chasem@wustl.edu>, michael brent <brent@wustl.edu>">
+      
+      
+        <link rel="canonical" href="https://brentlab.github.io/yeastdnnexplorer/tutorials/hyperparameter_sweep/">
+      
+      
+        <link rel="prev" href="../database_interface/">
+      
+      
+        <link rel="next" href="../lightning_crash_course/">
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.27">
+    
+    
+      
+        <title>Hyperparameter Sweep - yeastdnnexplorer</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.6543a935.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../css/ansi-colours.css">
+    
+      <link rel="stylesheet" href="../../css/jupyter-cells.css">
+    
+      <link rel="stylesheet" href="../../css/pandas-dataframe.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="yeastdnnexplorer" class="md-header__button md-logo" aria-label="yeastdnnexplorer" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            yeastdnnexplorer
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Hyperparameter Sweep
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var media,input,key,value,palette=__md_get("__palette");if(palette&&palette.color){"(prefers-color-scheme)"===palette.color.media&&(media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']"),palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent"));for([key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/brentlab/yeastdnnexplorer" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    yeastdnnexplorer
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="yeastdnnexplorer" class="md-nav__button md-logo" aria-label="yeastdnnexplorer" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    yeastdnnexplorer
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/brentlab/yeastdnnexplorer" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    yeastdnnexplorer
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Tutorials
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Tutorials
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../generate_in_silico_data/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Generate In-silico Data
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../database_interface/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Database Interface
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Hyperparameter Sweep
+  </span>
+  
+
+      </a>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lightning_crash_course/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Lightning Crash Course
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../testing_model_metrics/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Testing Model Metrics
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../visualizing_and_testing_data_generation_methods/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Visualizing and Testing Data Generation Methods
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    API
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            API
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_1" id="__nav_3_1_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Data Loaders
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1">
+            <span class="md-nav__icon md-icon"></span>
+            Data Loaders
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data_loaders/synthetic_data_loader/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Synthetic Data Loader
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../data_loaders/real_data_loader/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Real Data Loader
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../ml_models/customizable_model/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Models
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            Models
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ml_models/metrics_compute_nrmse/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Metrics compute nrmse
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ml_models/metrics_smse/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Metrics smse
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ml_models/simple_model/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Simple model
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_3" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../probability_models/default_perturbation_effect_adjustment_function/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Probability Models
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_3" id="__nav_3_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_3">
+            <span class="md-nav__icon md-icon"></span>
+            Probability Models
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../probability_models/GenePopulation/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    GenePopulation
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../probability_models/generate_binding_effects/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Generate binding effects
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../probability_models/generate_gene_population/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Generate Gene Population
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../probability_models/generate_perturbation_effects/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Generate perturbation effects
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../probability_models/generate_pvalues/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Generate pvalues
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../probability_models/perturbation_effect_adjustment_function_with_tf_relationships_boolean_logic/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Perturbation effect adjustment function with tf relationships boolean logic
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../probability_models/perturbation_effect_adjustment_function_with_tf_relationships/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Perturbation effect adjustment function with tf relationships
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_4" id="__nav_3_4_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Database Interface
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_4">
+            <span class="md-nav__icon md-icon"></span>
+            Database Interface
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4_1" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../interface/BindingManualQCAPI/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Records Only Classes
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_4_1" id="__nav_3_4_1_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_4_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_4_1">
+            <span class="md-nav__icon md-icon"></span>
+            Records Only Classes
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../interface/DataSourceAPI/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    DataSourceAPI
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../interface/ExpressionManualQCAPI/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    ExpressionManualQCAPI
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../interface/FileFormatAPI/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    FileFormatAPI
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../interface/GenomicFeatureAPI/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    GenomicFeatureAPI
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../interface/RegulatorAPI/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    RegulatorAPI
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4_2" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../interface/BindingAPI/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Records and Files Classes
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_4_2" id="__nav_3_4_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_4_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_4_2">
+            <span class="md-nav__icon md-icon"></span>
+            Records and Files Classes
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../interface/CallingCardsBackgroundAPI/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    CallingCardsBackgroundAPI
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../interface/ExpressionAPI/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    ExpressionAPI
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../interface/PromoterSetAPI/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    PromoterSetAPI
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../interface/PromoterSetSigAPI/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    PromoterSetSigAPI
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4_3" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../interface/AbstractAPI/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Developer Classes
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_4_3" id="__nav_3_4_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_4_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_4_3">
+            <span class="md-nav__icon md-icon"></span>
+            Developer Classes
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../interface/AbstractRecordsAndFilesAPI/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    AbstractRecordsAndFilesAPI
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../interface/AbstractRecordsOnlyAPI/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    AbstractRecordsOnlyAPI
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../interface/Cache/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Cache
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../interface/ParamsDict/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    ParamsDict
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+  
+
+
+  <h1>Hyperparameter Sweep</h1>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
+<script>
+(function() {
+  function addWidgetsRenderer() {
+    var requireJsScript = document.createElement('script');
+    requireJsScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js';
+
+    var mimeElement = document.querySelector('script[type="application/vnd.jupyter.widget-view+json"]');
+    var jupyterWidgetsScript = document.createElement('script');
+    var widgetRendererSrc = 'https://unpkg.com/@jupyter-widgets/html-manager@*/dist/embed-amd.js';
+    var widgetState;
+
+    // Fallback for older version:
+    try {
+      widgetState = mimeElement && JSON.parse(mimeElement.innerHTML);
+
+      if (widgetState && (widgetState.version_major < 2 || !widgetState.version_major)) {
+        widgetRendererSrc = 'jupyter-js-widgets@*/dist/embed.js';
+      }
+    } catch(e) {}
+
+    jupyterWidgetsScript.src = widgetRendererSrc;
+
+    document.body.appendChild(requireJsScript);
+    document.body.appendChild(jupyterWidgetsScript);
+  }
+
+  document.addEventListener('DOMContentLoaded', addWidgetsRenderer);
+}());
+</script>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>This notebook introduces how to perform a hyperparameter sweep to find the best hyperparameters for our model using the Optuna library. Feel free to modify the objective function if you would like to test other hyperparameters or values.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+
+<pre><code class="language-python"># imports 
+import argparse
+from argparse import Namespace
+
+from pytorch_lightning import Trainer, LightningModule, seed_everything
+from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.loggers import CSVLogger, TensorBoardLogger
+from torchsummary import summary
+
+from yeastdnnexplorer.data_loaders.synthetic_data_loader import SyntheticDataLoader
+from yeastdnnexplorer.ml_models.simple_model import SimpleModel
+from yeastdnnexplorer.ml_models.customizable_model import CustomizableModel
+
+import optuna
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# set random seed for reproducability
+seed_everything(42)
+</code></pre>
+
+
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="output_subarea output_stream output_stderr output_text">
+<pre>
+<code>Seed set to 42
+</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_text output_subarea output_execute_result">
+<pre>
+<code>42</code>
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Here we define loggers and checkpoints for our model. Checkpoints tell pytorch when to save instances of the model (that can be loaded and inspected later) and loggers tell pytorch how to format the metrics that the model logs during its training. </p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+
+<pre><code class="language-python"># Checkpoint to save the best version of model (during the entire training process) based on the metric passed into &quot;monitor&quot;
+best_model_checkpoint = ModelCheckpoint(
+    monitor=&quot;val_mse&quot;,  # You can modify this to save the best model based on any other metric that the model you're testing tracks and reports
+    mode=&quot;min&quot;,
+    filename=&quot;best-model-{epoch:02d}-{val_loss:.2f}.ckpt&quot;,
+    save_top_k=1,  # Can modify this to save the top k models
+)
+
+# Callback to save checkpoints every 2 epochs, regardless of performance
+periodic_checkpoint = ModelCheckpoint(
+    filename=&quot;periodic-{epoch:02d}.ckpt&quot;,
+    every_n_epochs=2,
+    save_top_k=-1,  # Setting -1 saves all checkpoints
+)
+
+# define loggers for the model
+tb_logger = TensorBoardLogger(&quot;logs/tensorboard_logs&quot;)
+csv_logger = CSVLogger(&quot;logs/csv_logs&quot;)
+</code></pre>
+
+
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Now we perform our hyperparameter sweep using the Optuna library. To do this, we need to define an objective function that returns a scalar value. This scalar value will be the value that our sweep is attempting to minimize. We train one instance of our model inside each call to the objective function (each model on each iteration will use a different selection of hyperparameters). In our objective function, we return the validation mse associated with the instance of the model. This is because we would like to find the combination of hyperparameters that leads to the lowest validation mse. We use validation mse instead of test mse since we do not want to risk fitting to the test data at all while tuning hyperparameters.</p>
+<p>If you&rsquo;d like to try different hyperparameters, you just need to modify the list of possible values corresponding to the hyperparameter in question.</p>
+<p>If you&rsquo;d like to run the hyperparamter sweep on real data instead of synthetic data, simply swap out the synthetic data loader for the real data loader.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+
+<pre><code class="language-python"># on each call to the objective function, it will choose a hyperparameter value from each of the suggest_categorical arrays and pass them into the model
+    # this allows us to test many different hyperparameter configurations during our sweep
+
+def objective(trial):
+    # model hyperparameters
+    lr = trial.suggest_categorical(&quot;lr&quot;, [0.01])
+    hidden_layer_num = trial.suggest_categorical(&quot;hidden_layer_num&quot;, [1, 2, 3, 5])
+    activation = trial.suggest_categorical(
+        &quot;activation&quot;, [&quot;ReLU&quot;, &quot;Sigmoid&quot;, &quot;Tanh&quot;, &quot;LeakyReLU&quot;]
+    )
+    optimizer = trial.suggest_categorical(&quot;optimizer&quot;, [&quot;Adam&quot;, &quot;SGD&quot;, &quot;RMSprop&quot;])
+    L2_regularization_term = trial.suggest_categorical(
+        &quot;L2_regularization_term&quot;, [0.0, 0.1]
+    )
+    dropout_rate = trial.suggest_categorical(
+        &quot;dropout_rate&quot;, [0.0, 0.5]
+    )
+
+    # data module hyperparameters
+    batch_size = trial.suggest_categorical(&quot;batch_size&quot;, [32])
+
+    # training hyperparameters
+    max_epochs = trial.suggest_categorical(
+        &quot;max_epochs&quot;, [1]
+    ) # default is 10
+
+    # defining what to pass in for the hidden layer sizes list based on the number of hidden layers
+    hidden_layer_sizes_configurations = {
+        1: [[64], [256]],
+        2: [[64, 32], [256, 64]],
+        3: [[256, 128, 32], [512, 256, 64]],
+        5: [[512, 256, 128, 64, 32]],
+    }
+    hidden_layer_sizes = trial.suggest_categorical(
+        f&quot;hidden_layer_sizes_{hidden_layer_num}_layers&quot;,
+        hidden_layer_sizes_configurations[hidden_layer_num],
+    )
+
+    print(&quot;=&quot; * 70)
+    print(&quot;About to create model with the following hyperparameters:&quot;)
+    print(f&quot;lr: {lr}&quot;)
+    print(f&quot;hidden_layer_num: {hidden_layer_num}&quot;)
+    print(f&quot;hidden_layer_sizes: {hidden_layer_sizes}&quot;)
+    print(f&quot;activation: {activation}&quot;)
+    print(f&quot;optimizer: {optimizer}&quot;)
+    print(f&quot;L2_regularization_term: {L2_regularization_term}&quot;)
+    print(f&quot;dropout_rate: {dropout_rate}&quot;)
+    print(f&quot;batch_size: {batch_size}&quot;)
+    print(f&quot;max_epochs: {max_epochs}&quot;)
+    print(&quot;&quot;)
+
+    # create data module
+    data_module = SyntheticDataLoader(
+        batch_size=batch_size,
+        num_genes=4000,
+        bound_mean=3.0,
+        bound=[0.5] * 10,
+        n_sample=[1, 2, 2, 4, 4],
+        val_size=0.1,
+        test_size=0.1,
+        random_state=42,
+        max_mean_adjustment=3.0,
+    )
+
+    num_tfs = sum(data_module.n_sample)  # sum of all n_sample is the number of TFs
+
+    # create model
+    model = CustomizableModel(
+        input_dim=num_tfs,
+        output_dim=num_tfs,
+        lr=lr,
+        hidden_layer_num=hidden_layer_num,
+        hidden_layer_sizes=hidden_layer_sizes,
+        activation=activation,
+        optimizer=optimizer,
+        L2_regularization_term=L2_regularization_term,
+        dropout_rate=dropout_rate,
+    )
+
+    # create trainer
+    trainer = Trainer(
+        max_epochs=max_epochs,
+        deterministic=True,
+        accelerator=&quot;cpu&quot;,
+        # callbacks and loggers are commented out for now since running a large sweep would generate an unnecessarily huge amount of checkpoints and logs
+        # callbacks=[best_model_checkpoint, periodic_checkpoint],
+        # logger=[tb_logger, csv_logger],
+    )
+
+    # train model
+    trainer.fit(model, data_module)
+
+    # get best validation loss from the model
+    return trainer.callback_metrics[&quot;val_mse&quot;]
+</code></pre>
+
+
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Now we define an optuna study, which represents our hyperparameter sweep. It will run the objective function n_trials times and choose the model that gave the best val_mse across all of those trials with different hyperparameters. Note that this will create a very large amount of output as it will show training stats for every model. This is why we print out the best params and loss in a separate cell.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+
+<pre><code class="language-python">STUDY_NAME = &quot;CustomizableModelHyperparameterSweep3&quot;
+NUM_TRIALS = 5 # you will need a lot more than 5 trials if you have many possible combinations of hyperparams
+
+# Perform hyperparameter optimization using Optuna
+study = optuna.create_study(
+    direction=&quot;minimize&quot;, # we want to minimize the val_mse
+    study_name=STUDY_NAME,
+    # storage=&quot;sqlite:///db.sqlite3&quot;, # you can save the study results in a database if you'd like, this is needed if you want to try and use the optuna dashboard library to dispaly results
+)
+study.optimize(objective, n_trials=NUM_TRIALS)
+
+# Get the best hyperparameters and their corresponding values
+best_params = study.best_params
+best_loss = study.best_value
+</code></pre>
+
+
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="output_subarea output_stream output_stderr output_text">
+<pre>
+<code>[I 2024-05-29 13:18:03,548] A new study created in memory with name: CustomizableModelHyperparameterSweep3
+/Users/ericjia/Library/Caches/pypoetry/virtualenvs/yeastdnnexplorer-iu4_cpc2-py3.11/lib/python3.11/site-packages/optuna/distributions.py:524: UserWarning: Choices for a categorical distribution should be a tuple of None, bool, int, float and str for persistent storage but contains [64] which is of type list.
+  warnings.warn(message)
+/Users/ericjia/Library/Caches/pypoetry/virtualenvs/yeastdnnexplorer-iu4_cpc2-py3.11/lib/python3.11/site-packages/optuna/distributions.py:524: UserWarning: Choices for a categorical distribution should be a tuple of None, bool, int, float and str for persistent storage but contains [256] which is of type list.
+  warnings.warn(message)
+</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>
+<code>======================================================================
+About to create model with the following hyperparameters:
+lr: 0.01
+hidden_layer_num: 1
+hidden_layer_sizes: [256]
+activation: Tanh
+optimizer: RMSprop
+L2_regularization_term: 0.1
+dropout_rate: 0.5
+batch_size: 32
+max_epochs: 1
+
+</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_subarea output_stream output_stderr output_text">
+<pre>
+<code>GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+IPU available: False, using: 0 IPUs
+HPU available: False, using: 0 HPUs
+/Users/ericjia/yeastdnnexplorer/yeastdnnexplorer/data_loaders/synthetic_data_loader.py:260: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  X_train, Y_train = torch.tensor(X_train, dtype=torch.float32), torch.tensor(
+/Users/ericjia/yeastdnnexplorer/yeastdnnexplorer/data_loaders/synthetic_data_loader.py:263: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  X_val, Y_val = torch.tensor(X_val, dtype=torch.float32), torch.tensor(
+/Users/ericjia/yeastdnnexplorer/yeastdnnexplorer/data_loaders/synthetic_data_loader.py:266: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  X_test, Y_test = torch.tensor(X_test, dtype=torch.float32), torch.tensor(
+
+  | Name          | Type              | Params
+----------------------------------------------------
+0 | activation    | Tanh              | 0     
+1 | input_layer   | Linear            | 3.6 K 
+2 | hidden_layers | ModuleList        | 0     
+3 | output_layer  | Linear            | 3.3 K 
+4 | dropout       | Dropout           | 0     
+5 | mae           | MeanAbsoluteError | 0     
+6 | SMSE          | SMSE              | 0     
+----------------------------------------------------
+6.9 K     Trainable params
+0         Non-trainable params
+6.9 K     Total params
+0.028     Total estimated model params size (MB)
+</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_text output_subarea">
+<pre>
+<code>Sanity Checking: |                                                                                            …</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_subarea output_stream output_stderr output_text">
+<pre>
+<code>/Users/ericjia/Library/Caches/pypoetry/virtualenvs/yeastdnnexplorer-iu4_cpc2-py3.11/lib/python3.11/site-packages/torch/utils/data/dataloader.py:558: UserWarning: This DataLoader will create 15 worker processes in total. Our suggested max number of worker in current system is 8 (`cpuset` is not taken into account), which is smaller than what this DataLoader is going to create. Please be aware that excessive worker creation might get DataLoader running slow or even freeze, lower the worker number to avoid potential slowness/freeze if necessary.
+  warnings.warn(_create_warning_msg(
+</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_text output_subarea">
+<pre>
+<code>Training: |                                                                                                   …</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_text output_subarea">
+<pre>
+<code>Validation: |                                                                                                 …</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_subarea output_stream output_stderr output_text">
+<pre>
+<code>`Trainer.fit` stopped: `max_epochs=1` reached.
+[I 2024-05-29 13:18:26,417] Trial 0 finished with value: 4.489274501800537 and parameters: {'lr': 0.01, 'hidden_layer_num': 1, 'activation': 'Tanh', 'optimizer': 'RMSprop', 'L2_regularization_term': 0.1, 'dropout_rate': 0.5, 'batch_size': 32, 'max_epochs': 1, 'hidden_layer_sizes_1_layers': [256]}. Best is trial 0 with value: 4.489274501800537.
+/Users/ericjia/Library/Caches/pypoetry/virtualenvs/yeastdnnexplorer-iu4_cpc2-py3.11/lib/python3.11/site-packages/optuna/distributions.py:524: UserWarning: Choices for a categorical distribution should be a tuple of None, bool, int, float and str for persistent storage but contains [64] which is of type list.
+  warnings.warn(message)
+/Users/ericjia/Library/Caches/pypoetry/virtualenvs/yeastdnnexplorer-iu4_cpc2-py3.11/lib/python3.11/site-packages/optuna/distributions.py:524: UserWarning: Choices for a categorical distribution should be a tuple of None, bool, int, float and str for persistent storage but contains [256] which is of type list.
+  warnings.warn(message)
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+IPU available: False, using: 0 IPUs
+HPU available: False, using: 0 HPUs
+</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>
+<code>======================================================================
+About to create model with the following hyperparameters:
+lr: 0.01
+hidden_layer_num: 1
+hidden_layer_sizes: [256]
+activation: LeakyReLU
+optimizer: SGD
+L2_regularization_term: 0.1
+dropout_rate: 0.5
+batch_size: 32
+max_epochs: 1
+
+</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_subarea output_stream output_stderr output_text">
+<pre>
+<code>
+  | Name          | Type              | Params
+----------------------------------------------------
+0 | activation    | LeakyReLU         | 0     
+1 | input_layer   | Linear            | 3.6 K 
+2 | hidden_layers | ModuleList        | 0     
+3 | output_layer  | Linear            | 3.3 K 
+4 | dropout       | Dropout           | 0     
+5 | mae           | MeanAbsoluteError | 0     
+6 | SMSE          | SMSE              | 0     
+----------------------------------------------------
+6.9 K     Trainable params
+0         Non-trainable params
+6.9 K     Total params
+0.028     Total estimated model params size (MB)
+</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_text output_subarea">
+<pre>
+<code>Sanity Checking: |                                                                                            …</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_text output_subarea">
+<pre>
+<code>Training: |                                                                                                   …</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_text output_subarea">
+<pre>
+<code>Validation: |                                                                                                 …</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_subarea output_stream output_stderr output_text">
+<pre>
+<code>`Trainer.fit` stopped: `max_epochs=1` reached.
+[I 2024-05-29 13:18:45,320] Trial 1 finished with value: 6.033911228179932 and parameters: {'lr': 0.01, 'hidden_layer_num': 1, 'activation': 'LeakyReLU', 'optimizer': 'SGD', 'L2_regularization_term': 0.1, 'dropout_rate': 0.5, 'batch_size': 32, 'max_epochs': 1, 'hidden_layer_sizes_1_layers': [256]}. Best is trial 0 with value: 4.489274501800537.
+/Users/ericjia/Library/Caches/pypoetry/virtualenvs/yeastdnnexplorer-iu4_cpc2-py3.11/lib/python3.11/site-packages/optuna/distributions.py:524: UserWarning: Choices for a categorical distribution should be a tuple of None, bool, int, float and str for persistent storage but contains [64, 32] which is of type list.
+  warnings.warn(message)
+/Users/ericjia/Library/Caches/pypoetry/virtualenvs/yeastdnnexplorer-iu4_cpc2-py3.11/lib/python3.11/site-packages/optuna/distributions.py:524: UserWarning: Choices for a categorical distribution should be a tuple of None, bool, int, float and str for persistent storage but contains [256, 64] which is of type list.
+  warnings.warn(message)
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+IPU available: False, using: 0 IPUs
+HPU available: False, using: 0 HPUs
+</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>
+<code>======================================================================
+About to create model with the following hyperparameters:
+lr: 0.01
+hidden_layer_num: 2
+hidden_layer_sizes: [256, 64]
+activation: ReLU
+optimizer: SGD
+L2_regularization_term: 0.0
+dropout_rate: 0.5
+batch_size: 32
+max_epochs: 1
+
+</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_subarea output_stream output_stderr output_text">
+<pre>
+<code>
+  | Name          | Type              | Params
+----------------------------------------------------
+0 | activation    | ReLU              | 0     
+1 | input_layer   | Linear            | 3.6 K 
+2 | hidden_layers | ModuleList        | 16.4 K
+3 | output_layer  | Linear            | 845   
+4 | dropout       | Dropout           | 0     
+5 | mae           | MeanAbsoluteError | 0     
+6 | SMSE          | SMSE              | 0     
+----------------------------------------------------
+20.9 K    Trainable params
+0         Non-trainable params
+20.9 K    Total params
+0.084     Total estimated model params size (MB)
+</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_text output_subarea">
+<pre>
+<code>Sanity Checking: |                                                                                            …</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_text output_subarea">
+<pre>
+<code>Training: |                                                                                                   …</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_text output_subarea">
+<pre>
+<code>Validation: |                                                                                                 …</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_subarea output_stream output_stderr output_text">
+<pre>
+<code>`Trainer.fit` stopped: `max_epochs=1` reached.
+[I 2024-05-29 13:19:02,993] Trial 2 finished with value: 6.900921821594238 and parameters: {'lr': 0.01, 'hidden_layer_num': 2, 'activation': 'ReLU', 'optimizer': 'SGD', 'L2_regularization_term': 0.0, 'dropout_rate': 0.5, 'batch_size': 32, 'max_epochs': 1, 'hidden_layer_sizes_2_layers': [256, 64]}. Best is trial 0 with value: 4.489274501800537.
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+IPU available: False, using: 0 IPUs
+HPU available: False, using: 0 HPUs
+</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>
+<code>======================================================================
+About to create model with the following hyperparameters:
+lr: 0.01
+hidden_layer_num: 2
+hidden_layer_sizes: [64, 32]
+activation: Tanh
+optimizer: Adam
+L2_regularization_term: 0.1
+dropout_rate: 0.0
+batch_size: 32
+max_epochs: 1
+
+</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_subarea output_stream output_stderr output_text">
+<pre>
+<code>
+  | Name          | Type              | Params
+----------------------------------------------------
+0 | activation    | Tanh              | 0     
+1 | input_layer   | Linear            | 896   
+2 | hidden_layers | ModuleList        | 2.1 K 
+3 | output_layer  | Linear            | 429   
+4 | dropout       | Dropout           | 0     
+5 | mae           | MeanAbsoluteError | 0     
+6 | SMSE          | SMSE              | 0     
+----------------------------------------------------
+3.4 K     Trainable params
+0         Non-trainable params
+3.4 K     Total params
+0.014     Total estimated model params size (MB)
+</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_text output_subarea">
+<pre>
+<code>Sanity Checking: |                                                                                            …</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_text output_subarea">
+<pre>
+<code>Training: |                                                                                                   …</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_text output_subarea">
+<pre>
+<code>Validation: |                                                                                                 …</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_subarea output_stream output_stderr output_text">
+<pre>
+<code>`Trainer.fit` stopped: `max_epochs=1` reached.
+[I 2024-05-29 13:19:19,976] Trial 3 finished with value: 4.5260910987854 and parameters: {'lr': 0.01, 'hidden_layer_num': 2, 'activation': 'Tanh', 'optimizer': 'Adam', 'L2_regularization_term': 0.1, 'dropout_rate': 0.0, 'batch_size': 32, 'max_epochs': 1, 'hidden_layer_sizes_2_layers': [64, 32]}. Best is trial 0 with value: 4.489274501800537.
+/Users/ericjia/Library/Caches/pypoetry/virtualenvs/yeastdnnexplorer-iu4_cpc2-py3.11/lib/python3.11/site-packages/optuna/distributions.py:524: UserWarning: Choices for a categorical distribution should be a tuple of None, bool, int, float and str for persistent storage but contains [512, 256, 128, 64, 32] which is of type list.
+  warnings.warn(message)
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+IPU available: False, using: 0 IPUs
+HPU available: False, using: 0 HPUs
+</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>
+<code>======================================================================
+About to create model with the following hyperparameters:
+lr: 0.01
+hidden_layer_num: 5
+hidden_layer_sizes: [512, 256, 128, 64, 32]
+activation: Tanh
+optimizer: RMSprop
+L2_regularization_term: 0.1
+dropout_rate: 0.5
+batch_size: 32
+max_epochs: 1
+
+</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_subarea output_stream output_stderr output_text">
+<pre>
+<code>
+  | Name          | Type              | Params
+----------------------------------------------------
+0 | activation    | Tanh              | 0     
+1 | input_layer   | Linear            | 7.2 K 
+2 | hidden_layers | ModuleList        | 174 K 
+3 | output_layer  | Linear            | 429   
+4 | dropout       | Dropout           | 0     
+5 | mae           | MeanAbsoluteError | 0     
+6 | SMSE          | SMSE              | 0     
+----------------------------------------------------
+182 K     Trainable params
+0         Non-trainable params
+182 K     Total params
+0.729     Total estimated model params size (MB)
+</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_text output_subarea">
+<pre>
+<code>Sanity Checking: |                                                                                            …</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_text output_subarea">
+<pre>
+<code>Training: |                                                                                                   …</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_text output_subarea">
+<pre>
+<code>Validation: |                                                                                                 …</code>
+</pre>
+</div>
+</div>
+<div class="output_area">
+<div class="output_subarea output_stream output_stderr output_text">
+<pre>
+<code>`Trainer.fit` stopped: `max_epochs=1` reached.
+[I 2024-05-29 13:19:37,861] Trial 4 finished with value: 4.612905502319336 and parameters: {'lr': 0.01, 'hidden_layer_num': 5, 'activation': 'Tanh', 'optimizer': 'RMSprop', 'L2_regularization_term': 0.1, 'dropout_rate': 0.5, 'batch_size': 32, 'max_epochs': 1, 'hidden_layer_sizes_5_layers': [512, 256, 128, 64, 32]}. Best is trial 0 with value: 4.489274501800537.
+</code>
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Print out the best hyperparameters and the val_mse assocaited with the model with the best hyperparameters.</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+
+<pre><code class="language-python">print(&quot;RESULTS&quot; + (&quot;=&quot; * 70))
+print(f&quot;Best hyperparameters: {best_params}&quot;)
+print(f&quot;Best loss: {best_loss}&quot;)
+</code></pre>
+
+
+</div>
+<div class="output_wrapper">
+<div class="output">
+<div class="output_area">
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>
+<code>RESULTS======================================================================
+Best hyperparameters: {'lr': 0.01, 'hidden_layer_num': 1, 'activation': 'Tanh', 'optimizer': 'RMSprop', 'L2_regularization_term': 0.1, 'dropout_rate': 0.5, 'batch_size': 32, 'max_epochs': 1, 'hidden_layer_sizes_1_layers': [256]}
+Best loss: 4.489274501800537
+</code>
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>And that&rsquo;s it! Now you could take what you found to be the best hyperparameters and train a model with them for many more epochs. The <a href="https://optuna.readthedocs.io/en/stable/">Optuna Documentation</a> will be a helpful resource if you&rsquo;d like to add more to this notebook or the hyperparam sweep functions</p>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+
+<pre><code class="language-python">
+</code></pre>
+
+
+</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": [], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.ad660dcc.min.js"></script>
+      
+    
+  </body>
+</html>
