@@ -1,14 +1,36 @@
+import asyncio
 import logging
 
 from shiny import App, reactive, run_app, ui
 
+from yeastdnnexplorer.interface import (
+    DtoAPI,
+    ExpressionAPI,
+    GenomicFeatureAPI,
+    PromoterSetSigAPI,
+    RankResponseAPI,
+    RegulatorAPI,
+)
 from yeastdnnexplorer.shiny_app.modules.dataset_filters.module import (
     dataset_filters_server,
     dataset_filters_ui,
 )
-from yeastdnnexplorer.shiny_app.modules.rank_response_plot.module import (
-    rank_response_plot_server,
-    rank_response_plot_ui,
+from yeastdnnexplorer.shiny_app.modules.dto_overview_plot import (
+    dto_overview_plot_server,
+    dto_overview_plot_ui,
+    parse_dto_metadata,
+)
+from yeastdnnexplorer.shiny_app.modules.rank_response_overview_plot.module import (
+    rank_response_overview_plot_server,
+    rank_response_overview_plot_ui,
+)
+from yeastdnnexplorer.shiny_app.modules.rank_response_replicate_plot.module import (
+    rank_response_replicate_plot_server,
+    rank_response_replicate_plot_ui,
+)
+from yeastdnnexplorer.shiny_app.modules.replicate_qc_table.module import (
+    replicate_qc_table_server,
+    replicate_qc_table_ui,
 )
 from yeastdnnexplorer.shiny_app.modules.upset_plot.module import (
     upset_plot_server,
@@ -19,55 +41,161 @@ from yeastdnnexplorer.utils import configure_logger
 logger = logging.getLogger("shiny")
 
 # Call the logger configuration function
-configure_logger("shiny", level=logging.INFO)
+configure_logger("shiny", level=logging.DEBUG)
 
 app_ui = ui.page_sidebar(
     dataset_filters_ui("data_filters"),
     upset_plot_ui("upset_plot"),
-    rank_response_plot_ui("rank_response_plot"),
+    rank_response_overview_plot_ui("rank_response_overview_plot"),
+    dto_overview_plot_ui("dto_overview_plot"),
+    rank_response_replicate_plot_ui("rank_response_replicate_plot"),
+    replicate_qc_table_ui("replicate_qc_table"),
 )
 
 
 def app_server(input, output, session):
-    _upset_reactives = {
-        "sets": reactive.Value(),
-        "regulators": reactive.Value(),
-    }
-    _binding_reactives = {
-        "assay": reactive.Value(),
-        "callingcards": {
-            "lab": reactive.Value(),
-            "combined_replicates": reactive.Value(),
-            "data_usable": reactive.Value(),
-        },
-        "harbison": {
-            "conditions": reactive.Value(),
-        },
-    }
-    _expression_reactives = {
-        "assay": reactive.Value(),
-        "mcisaac": {
-            "mechanism": reactive.Value(),
-            "effect_colname": reactive.Value(),
-            "restriction": reactive.Value(),
-            "time": reactive.Value(),
-            "replicate": reactive.Value(),
-            "data_usable": reactive.Value(),
-        },
-        "tfko": {
-            "source": reactive.Value(),
-            "replicate": reactive.Value(),
-            "data_usable": reactive.Value(),
-        },
+
+    # A dictionary of reactive values to store the metadata from the APIs
+    metadata_reactives = {
+        "dto": reactive.Value(),
+        "expression": reactive.Value(),
+        "genomicfeature": reactive.Value(),
+        "promotersetsig": reactive.Value(),
+        "rankresponse": reactive.Value(),
+        "regulator": reactive.Value(),
     }
 
-    dataset_filters_server(
-        "data_filters", _binding_reactives, _expression_reactives, _upset_reactives
+    # this is a task that will pull the metadata from the APIs when the "pull data"
+    # (see the data filter ui) button is clicked. This follows the pattern on the
+    # python shiny async tasks example
+    # https://shiny.posit.co/py/docs/nonblocking.html
+    # without more threads on both the client and server side, and lots of bandwidth,
+    # this probably isn't any faster.
+    # NOTE: need to be careful -- this is set up with caching right now at the /export
+    # endpoints. Need to make sure filtering doesn't affect this (i expect it does 20241220)
+    @ui.bind_task_button(button_id="btn")
+    @reactive.extended_task
+    async def load_metadata():
+        logger.info("Loading metadata from APIs...")
+
+        dto_api = DtoAPI()
+        expression_api = ExpressionAPI()
+        genomicfeature_api = GenomicFeatureAPI()
+        # note -- exclude mitra_cc
+        promotersetsig_api = PromoterSetSigAPI(
+            params={"source_name": "brent_nf_cc,harbison_chip,chipexo_pugh_allevents"}
+        )
+        rankresponse_api = RankResponseAPI()
+        regulator_api = RegulatorAPI()
+
+        (
+            dto_res,
+            expression_res,
+            genomicfeature_res,
+            promotersetsig_res,
+            rankresponse_res,
+            regulator_res,
+        ) = await asyncio.gather(
+            dto_api.read(),
+            expression_api.read(),
+            genomicfeature_api.read(),
+            promotersetsig_api.read(),
+            rankresponse_api.read(),
+            regulator_api.read(),
+        )
+
+        return {
+            "dto": dto_res,
+            "expression": expression_res,
+            "genomicfeature": genomicfeature_res,
+            "promotersetsig": promotersetsig_res,
+            "rankresponse": rankresponse_res,
+            "regulator": regulator_res,
+        }
+
+    # part of the async task machinery -- see load_metadata()
+    @reactive.effect
+    def _():
+        if not load_metadata.result():
+            logger.debug("Initial data is still being loaded.")
+            return
+        try:
+            metadata_res_dict = load_metadata.result()
+            logger.info("Processing metadata...")
+
+            for key, value in metadata_res_dict.items():
+                try:
+                    # TODO: move this to the database serializer
+                    if key == "dto":
+                        parse_dto_metadata(value["metadata"], inplace=True)
+                    metadata_reactives[key].set(value["metadata"])
+                except KeyError:
+                    logger.error(f"Failed to set metadata for {key}")
+        except Exception as e:
+            logger.error(f"Error processing metadata: {e}", exc_info=True)
+
+    # Dynamic accessor for metadata reactives
+    def get_metadata(key):
+        """
+        Factoring function to return a reactive.calc for metadata given some key
+        """
+
+        @reactive.calc
+        def metadata_calc():
+            return metadata_reactives[key].get()
+
+        return metadata_calc
+
+    # this returns a large dictionary of reactive values that are set in the
+    # dataset_filters_server. One of them is the pull_data button that is used below
+    # to trigger the load_data() task
+    data_filters = dataset_filters_server(
+        "data_filters",
+        get_metadata("promotersetsig"),
+        get_metadata("expression"),
+        get_metadata("regulator"),
+        get_metadata("rankresponse"),
+        get_metadata("dto"),
     )
+
+    # a reactive effect that triggers the load_metadata() task when the pull_data button
+    # is clicked. This in terms triggers the async task -- see load_metadata()
+    @reactive.effect
+    @reactive.event(data_filters["pull_data"])
+    def _():
+        load_metadata()
+
     upset_plot_server(
-        "upset_plot", _binding_reactives, _expression_reactives, _upset_reactives
+        "upset_plot",
+        data_filters["generate_plots"],
+        get_metadata("promotersetsig"),
+        get_metadata("expression"),
+        data_filters["binding"],
+        data_filters["expression"],
     )
-    rank_response_plot_server("rank_response_plot")
+
+    # based on the data filters, generate a distribution across replicates of the
+    # rank response data
+    rank_response_overview_plot_server(
+        "rank_response_overview_plot",
+        data_filters["generate_plots"],
+        data_filters["rankresponse_filter"],
+    )
+
+    # generate a dto overview plot
+    dto_overview_plot_server(
+        "dto_overview_plot", data_filters["generate_plots"], data_filters["dto_filter"]
+    )
+
+    # generate the replicate level rank response plot and output the metadata
+    # associated with those replicates
+    _rr_res = rank_response_replicate_plot_server(
+        "rank_response_replicate_plot",
+        data_filters["rankresponse_filter"],
+    )
+
+    # use the rank response replicate metadata to generate a table
+    replicate_qc_table_server("replicate_qc_table", _rr_res)
 
 
 # Create an app instance
@@ -75,150 +203,5 @@ app = App(ui=app_ui, server=app_server)
 
 if __name__ == "__main__":
     run_app(
-        "yeastdnnexplorer.shiny_app.app:app",
-        reload=True,
-        reload_dirs=["."],
+        "yeastdnnexplorer.shiny_app.app:app", reload=True, reload_dirs=["."], port=8006
     )
-
-# deprecated snippet showing how to use the output to hide items in the UI
-# import logging
-
-# # from plotly import express as px
-# from shiny import Inputs, Outputs, Session, reactive, render
-# from shinywidgets import render_widget
-# from upsetjs_jupyter_widget import UpSetJSWidget
-
-# from ..modules import login_interface_server
-
-# logger = logging.getLogger("shiny")
-
-# # Sample penguin data
-# penguins = {
-#     "body_mass_g": [
-#         3750,
-#         3800,
-#         3250,
-#         3700,
-#         3450,
-#         3650,
-#         3625,
-#         3575,
-#         3675,
-#         3450,
-#         3775,
-#         3700,
-#         3775,
-#         4100,
-#         3950,
-#         3650,
-#         3900,
-#         4000,
-#         4550,
-#         4250,
-#     ]
-# }
-
-
-# def server(input: Inputs, output: Outputs, session: Session):
-#     _authenticated, _token = login_interface_server("authenticate")
-#     # Define a reactive value to store the selected items
-#     _selected_items = reactive.Value(None)
-
-#     @output
-#     @render_widget()
-#     def rank_response_overview_plot():
-#         # generate_rank_response_overview_plot()
-
-#         scatterplot = px.histogram(
-#             data_frame=penguins,
-#             x="body_mass_g",
-#             nbins=input.n(),
-#         ).update_layout(
-#             title={"text": "Penguin Mass", "x": 0.5},
-#             yaxis_title="Count",
-#             xaxis_title="Body Mass (g)",
-#         )
-#         return scatterplot
-
-#     @output
-#     @render.text
-#     def authenticated():
-#         logger.debug(f"authenticated: {_authenticated.get()}")
-#         return "true" if _authenticated.get() else "false"
-
-#     @output
-#     @render_widget
-#     def upsetjs_plot():
-#         # Create the UpSetJSWidget instance
-#         w = UpSetJSWidget[str]()
-
-#         # Populate the widget with data
-#         w.from_dict(
-#             dict(
-#                 b_callingcards=["a", "b", "d", "e", "j"],
-#                 b_harbison=["a", "b", "c", "e", "g", "h", "k", "l", "m"],
-#                 b_chipexo=["a", "e", "f", "g", "h", "i", "j", "l", "m"],
-#                 p_mcisaac=["a", "b", "c", "g", "h", "i", "j", "k", "l", "m"],
-#                 p_kemmeren=["a", "e", "f", "g", "h", "i", "j", "k", "l", "m"],
-#                 p_hu_reiman=["a", "b", "c", "d", "e", "f", "k", "l", "m"],
-#             ),
-#             order_by="name",
-#         )
-
-#         # Define a function to capture selection changes
-#         def selection_changed(s):
-#             _selected_items.set(s if s else None)
-
-#         # Attach the callback to the widget's selection change event
-#         w.on_selection_changed(selection_changed)
-
-#         return w
-
-#     # Example of how to use the _selected_items reactive variable
-#     # elsewhere in your app
-#     @output
-#     @render.text
-#     def selected_items():
-#         return f"Selected Items: {_selected_items.get()}"
-
-
-# from shiny import ui
-# from shinywidgets import output_widget
-
-# from ..modules import login_interface_ui
-
-# app_ui = ui.page_fluid(
-#     # this div is used to populate the output.authenticated in the UI to allow
-#     # control over visibility of the login form and the main content
-#     ui.div(
-#         {
-#             "style": "position: absolute; clip: rect(0,0,0,0); "
-#             + "width: 0; height: 0; margin: 0; padding: 0; "
-#             + "border: 0; overflow: hidden;"
-#         },
-#         ui.output_text_verbatim("authenticated"),
-#     ),
-#     ui.panel_conditional(
-#         "output.authenticated === 'false'", login_interface_ui("authenticate")
-#     ),
-#     ui.panel_conditional(
-#         "output.authenticated === 'true'",
-#         ui.input_slider("n", "Number of bins", min=1, max=20, value=10),
-#     ),
-#     ui.panel_conditional(
-#         "output.authenticated === 'true'",
-#         output_widget("rank_response_overview_plot")
-#     ),
-#     ui.panel_conditional(
-#         "output.authenticated === 'true'",
-#         ui.div(
-#             ui.h2("UpSetJS"),
-#             ui.p("This is a test of the UpSetJS widget."),
-#             output_widget("upsetjs_plot"),
-#         ),
-#     ),
-#     ui.panel_conditional(
-#         "output.authenticated === 'true'",
-#         ui.p("Selected items: ", ui.output_text("selected_items")),
-#     ),
-# )

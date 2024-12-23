@@ -12,37 +12,41 @@ def callingcards_filter_ui(row_id="callingcards_filters_rows"):
         ui.card(
             ui.card_header("Calling Cards Filters", class_="filter_card_header"),
             ui.card(
-                ui.card_header("Lab Selection", class_="filter_card_header"),
-                ui.input_checkbox_group(
-                    "lab",
-                    "",
-                    choices=["brent", "mitra"],
-                    selected=["brent", "mitra"],
-                    inline=True,
-                ),
-                style="border: 1px solid #ccc; margin-bottom: 15px;",
-            ),
-            ui.card(
-                ui.card_header("Replicate Selection", class_="filter_card_header"),
+                ui.card_header("Aggregate Replicates", class_="filter_card_header"),
                 ui.p(
-                    "The callingcards data has replicates. "
-                    + "Choose 'single' or 'combined' "
-                    + "to return only the replicates, "
-                    + "or only the combined replicate data. "
-                    + "Select both to return all."
+                    "Where there are multiple passing replicates for a given condition, "
+                    + "select whether to include the aggregate of those replicates"
                 ),
                 ui.input_checkbox_group(
                     "combined_replicates",
                     "",
                     choices=["single", "combined"],
-                    selected=["combined"],
+                    selected=["single", "combined"],
                     inline=True,
                 ),
                 style="border: 1px solid #ccc; margin-bottom: 15px;",
             ),
             ui.card(
                 ui.card_header("Data Usability", class_="filter_card_header"),
-                ui.input_switch("data_usable", "Data Usable", True),
+                ui.p(
+                    "A value of true indicates a replicate passing automated and manual QC"
+                ),
+                ui.input_checkbox_group(
+                    "data_usable",
+                    "Data Usable",
+                    choices=["pass", "fail", "unreviewed"],
+                    selected=["pass", "fail", "unreviewed"],
+                    inline=True,
+                ),
+                style="border: 1px solid #ccc; margin-bottom: 15px;",
+            ),
+            ui.card(
+                ui.card_header("Deduplicate", class_="filter_card_header"),
+                ui.p(
+                    "When this is selected, if there is a aggregate replicate for a "
+                    + "regulator, it will be returned instead of the individual replicates"
+                ),
+                ui.input_switch("deduplicate", "Deduplicate", False),
                 style="border: 1px solid #ccc; margin-bottom: 15px;",
             ),
         ),
@@ -53,4 +57,4 @@ def callingcards_filter_ui(row_id="callingcards_filters_rows"):
 @module.server
 def callingcards_filter_server(input: Any, output: Any, session: Any):
     logger.debug("callingcards_filter server")
-    return input.lab, input.combined_replicates, input.data_usable
+    return input.combined_replicates, input.data_usable, input.deduplicate

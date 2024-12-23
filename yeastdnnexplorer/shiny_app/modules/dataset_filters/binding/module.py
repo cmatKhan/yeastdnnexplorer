@@ -51,10 +51,11 @@ def dataset_selector_server(
     # server for the calling cards and chip/harbison filtering options.
     # Note that the ui is added/removed based on the selected assays
     (
-        callingcards_lab,
         callingcards_combined_replicates,
         callingcards_data_usable,
+        callingcards_deduplicate,
     ) = callingcards_filters.callingcards_filter_server(callingcards_filter_element_id)
+
     harbison_conditions = harbison_filters.harbison_filter_server(
         harbison_filter_element_id
     )
@@ -62,8 +63,8 @@ def dataset_selector_server(
     @reactive.effect()
     async def _():
         """Update the Binding assays select input with the available options."""
-        logger.debug(f"Updating binding_assay choices: {binding_assay_options.get()}")
-        ui.update_select("binding_assay", choices=binding_assay_options.get())
+        logger.debug(f"Updating binding_assay choices: {binding_assay_options()}")
+        ui.update_select("binding_assay", choices=binding_assay_options())
 
     create_dynamic_filter_ui(
         input.binding_assay,
@@ -89,11 +90,12 @@ def dataset_selector_server(
     return {
         "assay": input.binding_assay,
         "callingcards": {
-            "lab": callingcards_lab,
             "combined_replicates": callingcards_combined_replicates,
             "data_usable": callingcards_data_usable,
+            "deduplicate": callingcards_deduplicate,
         },
         "harbison": {
             "conditions": harbison_conditions,
         },
+        "chipexo": {},
     }

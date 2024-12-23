@@ -37,8 +37,10 @@ def tfko_filter_ui(
                 style="border: 1px solid #ccc; margin-bottom: 15px;",
             ),
             ui.card(
-                ui.card_header("Data Usability", class_="filter_card_header"),
-                ui.input_switch("data_usable", "Data Usable", True),
+                ui.card_header("Passing Replicate", class_="filter_card_header"),
+                ui.input_checkbox_group(
+                    "passing_replicate", "Passing Replicate", ["true", "false"]
+                ),
                 style="border: 1px solid #ccc; margin-bottom: 15px;",
             ),
         ),
@@ -50,4 +52,4 @@ def tfko_filter_ui(
 def tfko_filter_server(
     input: Inputs, output: Outputs, session: Session
 ) -> tuple[reactive.Value, reactive.Value, reactive.Value]:
-    return (input.source, input.replicate, input.data_usable)
+    return (input.source, input.replicate, input.passing_replicate)

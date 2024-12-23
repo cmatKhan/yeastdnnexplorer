@@ -17,8 +17,9 @@ def harbison_filter_ui(harbison_condition_opts=None, row_id="harbison_filters_ro
                 ),
                 ui.input_checkbox_group(
                     "harbison_conditions",
-                    "",
-                    choices=harbison_condition_opts or [],
+                    "Harbison Conditions",
+                    choices=harbison_condition_opts() or [],
+                    selected=harbison_condition_opts() or [],
                     inline=True,
                 ),
                 style="border: 1px solid #ccc; margin-bottom: 15px;",
@@ -34,4 +35,4 @@ def harbison_filter_server(
     output: Any,
     session: Any,
 ):
-    return input.condition
+    return input.harbison_conditions

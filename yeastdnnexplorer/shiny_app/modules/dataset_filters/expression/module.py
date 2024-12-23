@@ -64,19 +64,18 @@ def dataset_selector_server(
         mcisaac_restriction,
         mcisaac_time,
         mcisaac_replicate,
-        mcisaac_data_usable,
+        mcisaac_preferred_replicate,
     ) = mcisaac_filters.mcisaac_filter_server(mcisaac_filter_element_id)
-    tfko_source, tfko_replicate, tfko_data_usable = tfko_filters.tfko_filter_server(
-        tfko_filter_element_id
+
+    tfko_source, tfko_replicate, tfko_preferred_replicate = (
+        tfko_filters.tfko_filter_server(tfko_filter_element_id)
     )
 
     @reactive.effect()
     async def _():
         """Update the Expression assays select input with the available options."""
-        logger.debug(
-            f"Updating expression_assay choices: {expression_assay_options.get()}"
-        )
-        ui.update_select("expression_assay", choices=expression_assay_options.get())
+        logger.debug(f"Updating expression_assay choices: {expression_assay_options()}")
+        ui.update_select("expression_assay", choices=expression_assay_options())
 
     create_dynamic_filter_ui(
         input.expression_assay,
@@ -111,11 +110,11 @@ def dataset_selector_server(
             "restriction": mcisaac_restriction,
             "time": mcisaac_time,
             "replicate": mcisaac_replicate,
-            "data_usable": mcisaac_data_usable,
+            "preferred_replicate": mcisaac_preferred_replicate,
         },
         "tfko": {
             "source": tfko_source,
             "replicate": tfko_replicate,
-            "data_usable": tfko_data_usable,
+            "preferred_replicate": tfko_preferred_replicate,
         },
     }
