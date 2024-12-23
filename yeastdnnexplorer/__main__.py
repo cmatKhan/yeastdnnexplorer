@@ -66,6 +66,7 @@ def run_shiny(args: argparse.Namespace) -> None:
         kwargs["reload"] = True
         kwargs["reload_dirs"] = ["yeastdnnexplorer/shiny_app"]  # type: ignore
     app_import_string = "yeastdnnexplorer.shiny_app.app:app"
+    kwargs["port"] = 8006
     run_app(app_import_string, **kwargs)
 
 

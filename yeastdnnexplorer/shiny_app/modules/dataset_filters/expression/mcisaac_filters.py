@@ -21,23 +21,9 @@ def mcisaac_filter_ui(
                 ui.input_checkbox_group(
                     "mechanism",
                     "",
-                    choices=mechanism_options,
+                    choices=mechanism_options(),
+                    selected=mechanism_options(),
                     inline=True,
-                ),
-                style="border: 1px solid #ccc; margin-bottom: 15px;",
-            ),
-            ui.card(
-                ui.card_header("Effect Selection", class_="filter_card_header"),
-                ui.input_radio_buttons(
-                    "effect_colname",
-                    "",
-                    choices=[
-                        "log2_ratio",
-                        "log2_cleaned_ratio",
-                        "log2_shrunken_timecourses",
-                    ],
-                    inline=True,
-                    selected="log2_shrunken_timecourses",
                 ),
                 style="border: 1px solid #ccc; margin-bottom: 15px;",
             ),
@@ -48,7 +34,8 @@ def mcisaac_filter_ui(
                 ui.input_checkbox_group(
                     "restriction",
                     "",
-                    choices=restriction_options,
+                    choices=restriction_options(),
+                    selected=restriction_options(),
                     inline=True,
                 ),
                 style="border: 1px solid #ccc; margin-bottom: 15px;",
@@ -58,7 +45,8 @@ def mcisaac_filter_ui(
                 ui.input_checkbox_group(
                     "time",
                     "",
-                    choices=time_options,
+                    choices=time_options(),
+                    selected=[x for x in time_options() if x == 15.0],
                     inline=True,
                 ),
                 style="border: 1px solid #ccc; margin-bottom: 15px;",
@@ -68,14 +56,19 @@ def mcisaac_filter_ui(
                 ui.input_checkbox_group(
                     "replicate",
                     "",
-                    choices=replicate_options,
+                    choices=replicate_options(),
+                    selected=replicate_options(),
                     inline=True,
                 ),
                 style="border: 1px solid #ccc; margin-bottom: 15px;",
             ),
             ui.card(
-                ui.card_header("Data Usability", class_="filter_card_header"),
-                ui.input_switch("data_usable", "Data Usable", True),
+                ui.card_header("Preferred Replicate", class_="filter_card_header"),
+                ui.input_checkbox_group(
+                    "preferred_replicate",
+                    "Preferred Replicate",
+                    ["true", "false"],
+                ),
                 style="border: 1px solid #ccc; margin-bottom: 15px;",
             ),
         ),
@@ -98,5 +91,5 @@ def mcisaac_filter_server(input: Inputs, output: Outputs, session: Session) -> t
         input.restriction,
         input.time,
         input.replicate,
-        input.data_usable,
+        input.preferred_replicate,
     )

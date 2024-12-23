@@ -1,17 +1,15 @@
 import logging
+from typing import Literal
 
 import pandas as pd
-from shiny import Inputs, Outputs, Session, module, reactive, req, ui
+from shiny import Inputs, Outputs, Session, module, reactive, ui
+from shiny.types import SilentException
 
-from yeastdnnexplorer.interface import BindingAPI, ExpressionAPI
 from yeastdnnexplorer.shiny_app.modules.dataset_filters.binding import (
     module as binding_module,
 )
 from yeastdnnexplorer.shiny_app.modules.dataset_filters.expression import (
     module as expression_module,
-)
-from yeastdnnexplorer.shiny_app.modules.dataset_filters.utils import (
-    update_outer_scope_reactive_dict,
 )
 
 logger = logging.getLogger("shiny")
@@ -20,6 +18,8 @@ logger = logging.getLogger("shiny")
 @module.ui
 def dataset_filters_ui():
     return ui.sidebar(
+        ui.input_task_button("pull_metadata", "Pull Metadata"),
+        ui.input_task_button("generate_plots", "Generate Plots"),
         binding_module.dataset_selector_ui("binding_data_filters"),
         expression_module.dataset_selector_ui("expression_data_filters"),
         width=500,
@@ -31,195 +31,282 @@ def dataset_filters_server(
     input: Inputs,
     output: Outputs,
     session: Session,
-    binding_reactives: dict[str, reactive.Value | dict[str, reactive.Value]],
-    expression_reactives: dict[str, reactive.Value | dict[str, reactive.Value]],
-    upset_reactives: dict[str, reactive.Value],
-) -> None:
-    # Binding Setup
-    _bindingAPI = reactive.Value(BindingAPI())
-    _binding_metadata_df = reactive.Value()
-    _binding_assay_options = reactive.Value()
-    _harbison_conditions_options = reactive.Value()
+    _promotersetsig_meta: reactive.Value,
+    _expression_meta: reactive.Value,
+    _regulator_meta: reactive.Value,
+    _rankresponse_meta: reactive.Value,
+    _dto_meta: reactive.Value,
+) -> dict[str, reactive.Value | dict[str, reactive.Value]]:
+    """
+    This server initializes filters for binding and expression datasets and returns
+    reactives for external usage.
+    """
 
-    @reactive.effect()
-    async def _():
-        """Set/update the _binding_metadata_df reactive value with the current
-        metadata."""
-        req(_bindingAPI)
-        logger.info("Fetching BindingAPI metadata")
-        binding_api = _bindingAPI.get()
-        res = await binding_api.read()
-        try:
-            df = res.get("metadata", pd.DataFrame())
-            _binding_metadata_df.set(df)
-            logger.debug(f"_binding_metadata_df: {df.head()}")
-        except KeyError:
-            logger.error(
-                "Could not retrieve BindingAPI metadata. "
-                + "The 'metadata' key was not found in the binding API response."
-            )
-        except (ValueError, TimeoutError, pd.errors.EmptyDataError) as exc:
-            logger.error(
-                f"An error occurred while fetching the "
-                f"BindingAPI metadata. Error: {exc}"
-            )
+    # Define reactivity for binding metadata
+    @reactive.calc
+    def binding_assay_options():
+        promotersetsig_meta_df = _promotersetsig_meta()
+        return promotersetsig_meta_df.assay.unique().tolist()
 
-    @reactive.effect()
-    async def _():
-        """Set/update the _binding_assay_options reactive value with the available
-        binding assays."""
-        req(_binding_metadata_df)
-        logger.info("Fetching binding assay list")
-        df = _binding_metadata_df.get()
-        try:
-            binding_assays = df.assay.unique().tolist()
-            _binding_assay_options.set(binding_assays)
-            logger.debug(f"Binding assays: {binding_assays}")
-        except AttributeError as exc:
-            logger.error(
-                f"The 'assay' column was not found in the binding metadata. "
-                f"Error: {exc}"
-            )
+    @reactive.calc
+    def harbison_conditions_options():
+        promotersetsig_meta_df = _promotersetsig_meta()
+        return (
+            promotersetsig_meta_df[
+                promotersetsig_meta_df.source_name == "harbison_chip"
+            ]
+            .condition.unique()
+            .tolist()
+        )
 
-    @reactive.effect()
-    async def _():
-        """Set/update the _harbison_conditions_options reactive value with the current
-        Harbison conditions."""
-        req(_binding_metadata_df)
-        logger.info("Fetching Harbison conditions")
-        df = _binding_metadata_df.get()
-        try:
-            harbison_choices = (
-                df[df.source_name == "harbison_chip"].condition.unique().tolist()
-            )
-            _harbison_conditions_options.set(harbison_choices)
-            logger.debug(f"Harbison conditions: {harbison_choices}")
-        except AttributeError as exc:
-            logger.error(
-                f"The 'condition' column was not found in the binding "
-                f"metadata DataFrame. Error: {exc}"
-            )
+    # Define reactivity for expression metadata
+    @reactive.calc
+    def expression_assay_options():
+        expression_meta_df = _expression_meta()
+        return expression_meta_df.assay.unique().tolist()
 
-    binding_server_reactive_dict = binding_module.dataset_selector_server(
-        "binding_data_filters",
-        binding_assay_options=_binding_assay_options,
-        harbison_conditions_options=_harbison_conditions_options,
-    )
+    @reactive.calc
+    def mcisaac_mechanism_options():
+        expression_meta_df = _expression_meta()
+        return expression_meta_df.mechanism.unique().tolist()
 
-    update_outer_scope_reactive_dict(binding_reactives, binding_server_reactive_dict)
+    @reactive.calc
+    def mcisaac_restriction_options():
+        expression_meta_df = _expression_meta()
+        return expression_meta_df.restriction.unique().tolist()
 
-    # Expression Setup
-    # Initialize the API (assuming some default configuration)
-    _expressionAPI = reactive.Value(ExpressionAPI())
-    _expression_metadata_df = reactive.Value()
-    _expression_assay_options = reactive.Value()
-    _mcisaac_mechanism_options = reactive.Value()
-    _mcisaac_restriction_options = reactive.Value()
-    _mcisaac_time_options = reactive.Value()
-    _mcisaac_replicate_options = reactive.Value()
+    @reactive.calc
+    def mcisaac_time_options():
+        expression_meta_df = _expression_meta()
+        time_options = expression_meta_df.time.unique().tolist()
+        time_options.sort()
+        return time_options
 
-    @reactive.effect()
-    async def _():
-        """Set/update the _expression_metadata_df reactive value with the current
-        metadata."""
-        req(_expressionAPI)
-        logger.info("Fetching ExpressionAPI metadata")
-        expression_api = _expressionAPI.get()
-        res = await expression_api.read()
-        try:
-            df = res.get("metadata", pd.DataFrame())
-            _expression_metadata_df.set(df)
-            logger.debug(f"_expression_metadata_df: {df.head()}")
-        except KeyError:
-            logger.error(
-                "Could not retrieve ExpressionAPI metadata. "
-                + "The 'metadata' key was not found in the expression API response."
-            )
-        except (ValueError, TimeoutError, pd.errors.EmptyDataError) as exc:
-            logger.error(
-                f"An error occurred while fetching the "
-                f"ExpressionAPI metadata. Error: {exc}"
-            )
+    @reactive.calc
+    def mcisaac_replicate_options():
+        expression_meta_df = _expression_meta()
+        return expression_meta_df.replicate.unique().tolist()
 
-    @reactive.effect()
-    async def _():
-        """Set/update the _expression_assay_options reactive value with the available
-        expression assays."""
-        req(_expression_metadata_df)
-        logger.info("Fetching expression assay list")
-        df = _expression_metadata_df.get()
-        try:
-            expression_assays = df.assay.unique().tolist()
-            _expression_assay_options.set(expression_assays)
-            logger.debug(f"Binding assays: {expression_assays}")
-        except AttributeError as exc:
-            logger.error(
-                f"The 'assay' column was not found in the expression metadata. "
-                f"Error: {exc}"
-            )
-
-    @reactive.effect()
-    async def _():
-        """Set/update the mcisaac option reactives: mechanism, restriction, time,
-        replicate."""
-        req(_expression_metadata_df)
-        logger.info("Fetching Mcisaac OE conditions")
-        df = _expression_metadata_df.get()
-        try:
-            mcisaac_df = df[df.source_name == "mcisaac_oe"]
-        except AttributeError as exc:
-            logger.error(
-                f"The 'source_name' column was not found in the expression "
-                f"metadata DataFrame. Error: {exc}"
-            )
-        try:
-            mechanism_options = mcisaac_df.mechanism.unique().tolist()
-            _mcisaac_mechanism_options.set(mechanism_options)
-            logger.debug(f"McIsaac mechanism options: {mechanism_options}")
-        except AttributeError as exc:
-            logger.error(
-                f"The 'mechanism' column was not found in the expression "
-                f"metadata DataFrame. Error: {exc}"
-            )
-        try:
-            restriction_options = mcisaac_df.restriction.unique().tolist()
-            _mcisaac_restriction_options.set(restriction_options)
-            logger.debug(f"McIsaac restriction options: {restriction_options}")
-        except AttributeError as exc:
-            logger.error(
-                f"The 'restriction' column was not found in the expression "
-                f"metadata DataFrame. Error: {exc}"
-            )
-        try:
-            time_options = mcisaac_df.time.unique().tolist()
-            time_options.sort()
-            time_options = [str(x) for x in time_options]
-            _mcisaac_time_options.set(time_options)
-            logger.debug(f"McIsaac time options: {time_options}")
-        except AttributeError as exc:
-            logger.error(
-                f"The 'time' column was not found in the expression "
-                f"metadata DataFrame. Error: {exc}"
-            )
-        try:
-            replicate_options = mcisaac_df.replicate.unique().tolist()
-            _mcisaac_replicate_options.set(replicate_options)
-            logger.debug(f"McIsaac replicate options: {replicate_options}")
-        except AttributeError as exc:
-            logger.error(
-                f"The 'replicate' column was not found in the expression "
-                f"metadata DataFrame. Error: {exc}"
-            )
-
-    expression_server_reactive_mapping = expression_module.dataset_selector_server(
+    # Call expression module and return its reactives
+    expression_reactives = expression_module.dataset_selector_server(
         "expression_data_filters",
-        expression_assay_options=_expression_assay_options,
-        mcisaac_mechanism_options=_mcisaac_mechanism_options,
-        mcisaac_restriction_options=_mcisaac_restriction_options,
-        mcisaac_time_options=_mcisaac_time_options,
-        mcisaac_replicate_options=_mcisaac_replicate_options,
+        expression_assay_options=expression_assay_options,
+        mcisaac_mechanism_options=mcisaac_mechanism_options,
+        mcisaac_restriction_options=mcisaac_restriction_options,
+        mcisaac_time_options=mcisaac_time_options,
+        mcisaac_replicate_options=mcisaac_replicate_options,
     )
 
-    update_outer_scope_reactive_dict(
-        expression_reactives, expression_server_reactive_mapping
+    # Call binding module and return its reactives
+    binding_reactives = binding_module.dataset_selector_server(
+        "binding_data_filters",
+        binding_assay_options=binding_assay_options,
+        harbison_conditions_options=harbison_conditions_options,
     )
+
+    # NOTE: see the following docs on SilentException for reactive.value
+    # https://shiny.posit.co/py/api/express/reactive.value.html#raises
+    # This is handled this way because, when a certain assay isn't selected in the UI,
+    # the corresponding reactive value isn't set and it raises a SilentException and
+    # would not return without the handling
+    @reactive.calc
+    def promotersetsig_filter():
+        """
+        Filter the promotersetsig metadata based on the selected filters.
+        """
+        df = _promotersetsig_meta()
+
+        # Filter based on binding filters
+        binding_assays = binding_reactives["assay"].get()
+        if binding_assays:
+            df = df[df.assay.isin(binding_assays)]
+
+        try:
+            callingcards_combined_replicates = binding_reactives["callingcards"][
+                "combined_replicates"
+            ].get()
+            if "single" not in callingcards_combined_replicates:
+                # remove records from df where assay is callingcards and single_binding
+                # is null
+                df = df[~((df.assay == "callingcards") & (df.single_binding.isnull()))]
+            if "combined" not in callingcards_combined_replicates:
+                # remove records from df where assay is callingcards and composite_binding
+                # is not null
+                df = df[
+                    ~((df.assay == "callingcards") & (df.composite_binding.notnull()))
+                ]
+
+            callingcards_data_usable = binding_reactives["callingcards"][
+                "data_usable"
+            ].get()
+
+            if callingcards_data_usable:
+                # consider only the records where the assay is callingcards and filter for
+                # rows in callingcards_data_usable
+                df = df[
+                    (df.assay == "callingcards")
+                    & (df.data_usable.isin(callingcards_data_usable))
+                ]
+
+            callingcards_deduplicate = binding_reactives["callingcards"][
+                "deduplicate"
+            ].get()
+
+            if callingcards_deduplicate:
+                # group by regulator and source_name. Where there are multiple records, if
+                # one of those records has composite_binding not null, then keep only that
+                # else, keep all the records
+                df = (
+                    df.groupby(["regulator_symbol", "source_name"], group_keys=False)
+                    .apply(
+                        lambda x: (
+                            x[x.composite_binding.notnull()]
+                            if x.composite_binding.notnull().any()
+                            else x
+                        )
+                    )
+                    .reset_index(drop=True)
+                )
+        except SilentException:
+            logger.debug(
+                "callingcards isn't selected -- no callingcards filters present. skipping."
+            )
+
+        try:
+            harbison_conditions_options = binding_reactives["harbison"][
+                "conditions"
+            ].get()
+
+            if harbison_conditions_options:
+                df = df[
+                    (
+                        (df.source_name == "harbison_chip")
+                        & df.condition.isin(harbison_conditions_options)
+                    )
+                    | (df.source_name != "harbison_chip")
+                ]
+        except SilentException:
+            logger.debug(
+                "chip isn't selected -- no harbison conditions present. skipping."
+            )
+
+        return df
+
+    # NOTE: see the following docs on SilentException for reactive.value
+    # https://shiny.posit.co/py/api/express/reactive.value.html#raises
+    # This is handled this way because, when a certain assay isn't selected in the UI,
+    # the corresponding reactive value isn't set and it raises a SilentException and
+    # would not return without the handling
+    @reactive.calc
+    def expression_filter():
+        """
+        Filter the expression metadata based on the selected filters.
+        """
+        df = _expression_meta()
+
+        try:
+            # Filter based on expression filters
+            assay = expression_reactives["assay"].get()
+            if assay:
+                df = df[df.assay.isin(assay)]
+
+            mcisaac_keys = [
+                "mechanism",
+                "restriction",
+                "time",
+                "preferred_replicate",
+            ]
+            for key in mcisaac_keys:
+                mcisaac_value = expression_reactives["mcisaac"][key].get()
+                if mcisaac_value:
+                    # TODO: fix this hack on setting preferred_replicate to boolean
+                    if key == "preferred_replicate":
+                        mcisaac_value = [x.lower() == "true" for x in mcisaac_value]
+                    # TODO: fix this hack on setting time (or at least make more apparent)
+                    if key == "time":
+                        mcisaac_value = [float(x) for x in mcisaac_value]
+                    df = df[
+                        ((df.source_name == "mcisaac_oe") & df[key].isin(mcisaac_value))
+                        | (df.source_name != "mcisaac_oe")
+                    ]
+
+        except SilentException:
+            logger.debug(
+                "expression isn't selected -- no expression filters present. skipping."
+            )
+
+        try:
+            tfko_source = expression_reactives["tfko"]["source"].get()
+            if tfko_source:
+                source_lookup = {
+                    "kemmeren": "kemmeren_tfko",
+                    "hu_reimann": "hu_reimann_tfko",
+                }
+                tfko_keys = ["replicate", "preferred_replicate"]
+                try:
+                    for key in tfko_keys:
+                        tfko_filter_value = expression_reactives["tfko"][key].get()
+                        if tfko_filter_value:
+
+                            # TODO: fix this hack on setting preferred_replicate to boolean
+                            if key == "preferred_replicate":
+                                tfko_filter_value = [
+                                    x.lower() == "true" for x in tfko_filter_value
+                                ]
+                            df = df[
+                                (
+                                    (df.source_name == source_lookup[tfko_source])
+                                    & df[key].isin(tfko_filter_value)
+                                )
+                                | (df.source_name != source_lookup[tfko_source])
+                            ]
+                except SilentException:
+                    logger.debug(
+                        "tfko isn't selected -- no tfko filters present. skipping."
+                    )
+        except SilentException:
+            logger.debug("tfko isn't selected -- no tfko filters present. skipping.")
+
+        return df
+
+    def dto_rr_filter(which_meta: Literal["rankresponse", "dto"]):
+        """
+        Factory function to filter the rankresponse or dto metadata
+        based on the selected filters.
+
+        :param which_meta: str, either "rankresponse" or "dto"
+        """
+
+        @reactive.calc
+        def inner():
+            meta_df = _dto_meta() if which_meta == "dto" else _rankresponse_meta()
+            # raise error if the fields `promotersetsig` and `expression` are not present
+            if not {"promotersetsig", "expression"}.issubset(meta_df.columns):
+                raise ValueError(
+                    "The metadata dataframe should have columns 'promotersetsig' and 'expression'"
+                )
+            promotersetsig_filtered = promotersetsig_filter()
+            expression_filtered = expression_filter()
+
+            # filter the rankresponse table based on the promotersetsig and experssion fitlers
+
+            df = meta_df[
+                meta_df.promotersetsig.isin(promotersetsig_filtered.id)
+                & meta_df.expression.isin(expression_filtered.id)
+            ]
+
+            return df
+
+        return inner
+
+    # Return all reactives
+    return {
+        "pull_data": input.pull_metadata,
+        "generate_plots": input.generate_plots,
+        "binding": binding_reactives,
+        "expression": expression_reactives,
+        "promotersetsig_filter": promotersetsig_filter,
+        "expression_filter": expression_filter,
+        "rankresponse_filter": dto_rr_filter("rankresponse"),
+        "dto_filter": dto_rr_filter("dto"),
+    }

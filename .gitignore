@@ -1,3 +1,6 @@
+# environmental files
+.env
+
 #mac files
 **/.DS_Store
 
