@@ -255,10 +255,10 @@ def dataset_filters_server(
                                 ]
                             df = df[
                                 (
-                                    (df.source_name == source_lookup[tfko_source])
+                                    (df.source_name.isin(source_lookup[tfko_source]))
                                     & df[key].isin(tfko_filter_value)
                                 )
-                                | (df.source_name != source_lookup[tfko_source])
+                                | (~df.source_name.isin(source_lookup[tfko_source]))
                             ]
                 except SilentException:
                     logger.debug(
@@ -294,6 +294,8 @@ def dataset_filters_server(
                 meta_df.promotersetsig.isin(promotersetsig_filtered.id)
                 & meta_df.expression.isin(expression_filtered.id)
             ]
+
+            breakpoint()
 
             return df
 

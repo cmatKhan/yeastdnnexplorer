@@ -23,6 +23,7 @@ def rank_response_replicate_plot_server(
     input: Inputs,
     output: Outputs,
     session: Session,
+    _trigger: reactive.value,
     _rankresponse_filtered: reactive.calc,
 ):
     _plot_dict_by_source = reactive.Value({})
@@ -38,11 +39,13 @@ def rank_response_replicate_plot_server(
         return regulator_list
 
     @reactive.effect
+    @reactive.event(_trigger)
     def _():
         regulator_list = regulators()
         ui.update_select("regulator", choices=regulator_list, selected=[])
 
-    # Fetch data asynchronously
+    # Fetch data asynchronously -- see the main app for documentation on this pattern
+    # of async fetching
     @reactive.extended_task
     async def fetch_data(regulator):
         regulator_api = RankResponseAPI(
@@ -76,7 +79,7 @@ def rank_response_replicate_plot_server(
         fetch_data(input["regulator"].get())
 
     # Process fetched data into plot dictionary
-    @reactive.Calc
+    @reactive.calc
     def update_plot_dict():
         rr_dict = _rr_res.get()
         if not rr_dict:
