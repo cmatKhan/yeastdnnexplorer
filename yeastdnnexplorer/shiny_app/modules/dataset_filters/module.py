@@ -1,7 +1,6 @@
 import logging
 from typing import Literal
 
-import pandas as pd
 from shiny import Inputs, Outputs, Session, module, reactive, ui
 from shiny.types import SilentException
 
@@ -31,16 +30,14 @@ def dataset_filters_server(
     input: Inputs,
     output: Outputs,
     session: Session,
-    _promotersetsig_meta: reactive.Value,
-    _expression_meta: reactive.Value,
-    _regulator_meta: reactive.Value,
-    _rankresponse_meta: reactive.Value,
-    _dto_meta: reactive.Value,
+    _promotersetsig_meta: reactive.calc,
+    _expression_meta: reactive.calc,
+    _regulator_meta: reactive.calc,
+    _rankresponse_meta: reactive.calc,
+    _dto_meta: reactive.calc,
 ) -> dict[str, reactive.Value | dict[str, reactive.Value]]:
-    """
-    This server initializes filters for binding and expression datasets and returns
-    reactives for external usage.
-    """
+    """This server initializes filters for binding and expression datasets and returns
+    reactives for external usage."""
 
     # Define reactivity for binding metadata
     @reactive.calc
@@ -111,9 +108,7 @@ def dataset_filters_server(
     # would not return without the handling
     @reactive.calc
     def promotersetsig_filter():
-        """
-        Filter the promotersetsig metadata based on the selected filters.
-        """
+        """Filter the promotersetsig metadata based on the selected filters."""
         df = _promotersetsig_meta()
 
         # Filter based on binding filters
@@ -130,8 +125,8 @@ def dataset_filters_server(
                 # is null
                 df = df[~((df.assay == "callingcards") & (df.single_binding.isnull()))]
             if "combined" not in callingcards_combined_replicates:
-                # remove records from df where assay is callingcards and composite_binding
-                # is not null
+                # remove records from df where assay is callingcards
+                # and composite_binding is not null
                 df = df[
                     ~((df.assay == "callingcards") & (df.composite_binding.notnull()))
                 ]
@@ -141,8 +136,8 @@ def dataset_filters_server(
             ].get()
 
             if callingcards_data_usable:
-                # consider only the records where the assay is callingcards and filter for
-                # rows in callingcards_data_usable
+                # consider only the records where the assay is callingcards
+                # and filter for rows in callingcards_data_usable
                 df = df[
                     (df.assay == "callingcards")
                     & (df.data_usable.isin(callingcards_data_usable))
@@ -153,9 +148,9 @@ def dataset_filters_server(
             ].get()
 
             if callingcards_deduplicate:
-                # group by regulator and source_name. Where there are multiple records, if
-                # one of those records has composite_binding not null, then keep only that
-                # else, keep all the records
+                # group by regulator and source_name. Where there are multiple
+                # records, if one of those records has composite_binding not null,
+                # then keep only that else, keep all the records
                 df = (
                     df.groupby(["regulator_symbol", "source_name"], group_keys=False)
                     .apply(
@@ -169,7 +164,8 @@ def dataset_filters_server(
                 )
         except SilentException:
             logger.debug(
-                "callingcards isn't selected -- no callingcards filters present. skipping."
+                "callingcards isn't selected -- no callingcards "
+                "filters present. skipping."
             )
 
         try:
@@ -199,9 +195,7 @@ def dataset_filters_server(
     # would not return without the handling
     @reactive.calc
     def expression_filter():
-        """
-        Filter the expression metadata based on the selected filters.
-        """
+        """Filter the expression metadata based on the selected filters."""
         df = _expression_meta()
 
         try:
@@ -222,7 +216,8 @@ def dataset_filters_server(
                     # TODO: fix this hack on setting preferred_replicate to boolean
                     if key == "preferred_replicate":
                         mcisaac_value = [x.lower() == "true" for x in mcisaac_value]
-                    # TODO: fix this hack on setting time (or at least make more apparent)
+                    # TODO: fix this hack on setting time (or at least
+                    # make more apparent)
                     if key == "time":
                         mcisaac_value = [float(x) for x in mcisaac_value]
                     df = df[
@@ -248,7 +243,8 @@ def dataset_filters_server(
                         tfko_filter_value = expression_reactives["tfko"][key].get()
                         if tfko_filter_value:
 
-                            # TODO: fix this hack on setting preferred_replicate to boolean
+                            # TODO: fix this hack on setting preferred_replicate to
+                            # boolean
                             if key == "preferred_replicate":
                                 tfko_filter_value = [
                                     x.lower() == "true" for x in tfko_filter_value
@@ -271,31 +267,33 @@ def dataset_filters_server(
 
     def dto_rr_filter(which_meta: Literal["rankresponse", "dto"]):
         """
-        Factory function to filter the rankresponse or dto metadata
-        based on the selected filters.
+        Factory function to filter the rankresponse or dto metadata based on the
+        selected filters.
 
         :param which_meta: str, either "rankresponse" or "dto"
+
         """
 
         @reactive.calc
         def inner():
             meta_df = _dto_meta() if which_meta == "dto" else _rankresponse_meta()
-            # raise error if the fields `promotersetsig` and `expression` are not present
+            # raise error if the fields `promotersetsig` and `expression`
+            # are not present
             if not {"promotersetsig", "expression"}.issubset(meta_df.columns):
                 raise ValueError(
-                    "The metadata dataframe should have columns 'promotersetsig' and 'expression'"
+                    "The metadata dataframe should have columns 'promotersetsig' "
+                    "and 'expression'"
                 )
             promotersetsig_filtered = promotersetsig_filter()
             expression_filtered = expression_filter()
 
-            # filter the rankresponse table based on the promotersetsig and experssion fitlers
+            # filter the rankresponse table based on the promotersetsig
+            # and experssion fitlers
 
             df = meta_df[
                 meta_df.promotersetsig.isin(promotersetsig_filtered.id)
                 & meta_df.expression.isin(expression_filtered.id)
             ]
-
-            breakpoint()
 
             return df
 

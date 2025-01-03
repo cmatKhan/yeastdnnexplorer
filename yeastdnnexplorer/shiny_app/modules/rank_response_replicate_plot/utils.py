@@ -37,7 +37,7 @@ def prepare_rank_response_data(rr_dict):
     data_dict = rr_dict.get("data")
 
     # Use list comprehension to generate plots
-    plots = {}
+    plots: dict = {}
     for _, row in metadata.iterrows():
         id = str(row["id"])
         data = data_dict.get(id)

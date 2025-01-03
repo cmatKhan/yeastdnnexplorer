@@ -7,11 +7,11 @@ logger = logging.getLogger("shiny")
 
 @module.ui
 def mcisaac_filter_ui(
+    mechanism_options: reactive.calc,
+    restriction_options: reactive.calc,
+    time_options: reactive.calc,
+    replicate_options: reactive.calc,
     row_id="callingcards_filters_rows",
-    mechanism_options: list[str] | None = None,
-    restriction_options: list[str] | None = None,
-    time_options: list[str] | None = None,
-    replicate_options: list[str] | None = None,
 ):
     return ui.row(
         ui.card(
