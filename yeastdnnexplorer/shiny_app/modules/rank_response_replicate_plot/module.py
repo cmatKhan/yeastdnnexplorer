@@ -1,6 +1,6 @@
 import logging
 
-from shiny import Inputs, Outputs, Session, module, reactive, render, req, ui
+from shiny import Inputs, Outputs, Session, module, reactive, render, ui
 from shinywidgets import output_widget, render_plotly
 
 from yeastdnnexplorer.interface import RankResponseAPI
@@ -13,7 +13,7 @@ logger = logging.getLogger("shiny")
 @module.ui
 def rank_response_replicate_plot_ui():
     return ui.div(
-        ui.input_select("regulator", "Regulator", []),  # Add button
+        ui.input_select("regulator", "Regulator", choices=[]),
         ui.output_ui("dynamic_expression_containers"),
     )
 
@@ -30,11 +30,14 @@ def rank_response_replicate_plot_server(
 
     _rr_res = reactive.Value()
 
+    _promotersetsig_selected = reactive.Value(set())
+
     @reactive.calc
     def regulators():
         logger.info("Fetching regulators for RankResponse data.")
         rr_filtered_meta = _rankresponse_filtered()
         regulator_list = rr_filtered_meta.regulator_symbol.unique().tolist()
+        regulator_list.sort()
         logger.debug(f"Regulators fetched: {regulator_list}")
         return regulator_list
 
@@ -42,24 +45,38 @@ def rank_response_replicate_plot_server(
     @reactive.event(_trigger)
     def _():
         regulator_list = regulators()
-        ui.update_select("regulator", choices=regulator_list, selected=[])
+        ui.update_select(
+            "regulator",
+            choices=regulator_list,
+            selected="",
+        )
 
     # Fetch data asynchronously -- see the main app for documentation on this pattern
     # of async fetching
     @reactive.extended_task
     async def fetch_data(regulator):
-        regulator_api = RankResponseAPI(
-            params={
-                "regulator_symbol": regulator,
-                "expression_conditions": "expression_source=kemmeren_tfko;expression_source=mcisaac_oe,time=15",
-            }
-        )
-        logger.info(
-            f"Fetching data from RankResponseAPI with params: {regulator_api.params}"
-        )
-        result = await regulator_api.read(retrieve_files=True)
-        logger.info("Async fetch completed.")
-        return result
+        with ui.Progress(min=0, max=1) as p:
+            p.set(
+                0.5,
+                message="Pulling RankResponse data",
+                detail="This may take a while...",
+            )
+            regulator_api = RankResponseAPI(
+                params={
+                    "regulator_symbol": regulator,
+                    "expression_conditions": (
+                        "expression_source=kemmeren_tfko;"
+                        "expression_source=mcisaac_oe,time=15"
+                    ),
+                }
+            )
+            logger.info(
+                "Fetching data from RankResponseAPI with params: "
+                f"{regulator_api.params}"
+            )
+            result = await regulator_api.read(retrieve_files=True)
+            logger.info("Async fetch completed.")
+            return result
 
     # Trigger fetch manually via button click
     @reactive.effect()
@@ -90,13 +107,29 @@ def rank_response_replicate_plot_server(
         expression_sources = metadata["expression_source"].unique()
 
         plot_dict_by_source = {}
+        promotersetsig_set = set()
         for source in expression_sources:
             filtered_metadata = metadata[metadata["expression_source"] == source]
+            try:
+                promotersetsig_set.update(
+                    [str(x) for x in filtered_metadata.promotersetsig.unique().tolist()]
+                )
+            except AttributeError:
+                logger.warning(
+                    f"Expression source {source} has no promotersetsig data."
+                )
             plot_dict_by_source[source] = prepare_rank_response_data(
                 {"metadata": filtered_metadata, "data": rr_dict.get("data")}
             )
 
         _plot_dict_by_source.set(plot_dict_by_source)
+
+        # add random to the list so that it is initially visible
+        promotersetsig_set.add("Random")
+        # update the selected promotersetsig
+        with reactive.isolate():
+            _promotersetsig_selected.set(promotersetsig_set)
+
         return plot_dict_by_source
 
     # Prepare dynamic UI
@@ -106,7 +139,7 @@ def rank_response_replicate_plot_server(
         if not plots_by_source:
             return []
 
-        containers = {}
+        containers: dict = {}
         for source, plots_dict in plots_by_source.items():
             container = ui.card(
                 ui.h3(f"Expression Source: {source}"),
@@ -142,9 +175,10 @@ def rank_response_replicate_plot_server(
 
     # Render plots dynamically
     @reactive.effect()
-    @reactive.event(_plot_dict_by_source)
-    def render_rank_response_replicate_plots():
-        plots_by_source = _plot_dict_by_source.get()
+    # @reactive.event(_plot_dict_by_source)
+    def _():
+        # plots_by_source = _plot_dict_by_source.get()
+        plots_by_source = update_plot_dict()
         if not plots_by_source:
             logger.warning("No rank response replicate plots to render.")
             return
@@ -154,6 +188,13 @@ def rank_response_replicate_plot_server(
                 plots_dict
             ).items():
                 plot_id = f"plot_{source}_{expression_id}"
+                promotersetsig_selected = _promotersetsig_selected.get()
+                for trace in fig["data"]:
+                    trace["visible"] = (
+                        "legendonly"
+                        if trace["name"] not in promotersetsig_selected
+                        else True
+                    )
 
                 @output(id=plot_id)
                 @render_plotly
@@ -162,4 +203,4 @@ def rank_response_replicate_plot_server(
 
         logger.info("Rank response plots rendered successfully.")
 
-    return _rr_res
+    return _rr_res, _promotersetsig_selected

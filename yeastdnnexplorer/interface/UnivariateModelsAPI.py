@@ -11,20 +11,20 @@ import requests  # type: ignore
 from yeastdnnexplorer.interface.AbstractRecordsOnlyAPI import AbstractRecordsOnlyAPI
 
 
-class DtoAPI(AbstractRecordsOnlyAPI):
+class UnivariateModelsAPI(AbstractRecordsOnlyAPI):
     """
-    A class to interact with the DTO API.
+    A class to interact with the UnivariateModels API.
 
-    Retrieves dto data from the database.
+    Retrieves univariatemodels data from the database.
 
     """
 
     def __init__(self, **kwargs) -> None:
         """
-        Initialize the DTO object. This will serve as an interface to the DTO endpoint
-        of both the database and the application cache.
+        Initialize the UnivariateModels object. This will serve as an interface to the
+        UnivariateModels endpoint of both the database and the application cache.
 
-        :param url: The URL of the DTO API
+        :param url: The URL of the UnivariateModels API
         :param kwargs: Additional parameters to pass to AbstractAPI.
 
         """
@@ -34,31 +34,9 @@ class DtoAPI(AbstractRecordsOnlyAPI):
         )
 
         super().__init__(
-            url=kwargs.pop("url", os.getenv("DTO_URL", "")),
+            url=kwargs.pop("url", os.getenv("UNIVARIATEMODELS_URL", "")),
             **kwargs,
         )
-
-    async def read(self, *args, **kwargs) -> Any:
-        """
-        Override the read() method to use a custom callback that parses metadata.
-
-        :param callback: The function to call with the metadata. Defaults to parsing
-            metadata.
-        :type callback: Callable[[pd.DataFrame, dict[str, Any] | None, Any], Any]
-        :return: The result of the callback function.
-        :rtype: Any
-
-        """
-
-        # Define the default callback
-        def dto_callback(metadata, data, cache, **kwargs):
-            return {"metadata": self.parse_metadata(metadata), "data": data}
-
-        # Explicitly set the callback argument to dto_callback
-        kwargs["callback"] = dto_callback
-
-        # Call the superclass method with updated kwargs
-        return await super().read(*args, **kwargs)
 
     async def submit(
         self,
@@ -66,26 +44,27 @@ class DtoAPI(AbstractRecordsOnlyAPI):
         **kwargs,
     ) -> Any:
         """
-        Submit a DTO task to the DTO API.
+        Submit a UnivariateModels task to the UnivariateModels API.
 
-        :param post_dict: The dictionary to submit to the DTO API. The typing needs to
-            be adjusted -- it can take a list of dictionaries to submit a batch.
+        :param post_dict: The dictionary to submit to the UnivariateModels API. The
+            typing needs to be adjusted -- it can take a list of dictionaries to submit
+            a batch.
         :return: The group_task_id of the submitted task.
 
         """
-        # make a post request with the post_dict to dto_url
-        dto_url = f"{self.url.rstrip('/')}/submit/"
-        self.logger.debug("dto_url: %s", dto_url)
+        # make a post request with the post_dict to univariatemodels_url
+        univariatemodels_url = f"{self.url.rstrip('/')}/submit/"
+        self.logger.debug("univariatemodels_url: %s", univariatemodels_url)
 
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                dto_url, headers=self.header, json=post_dict
+                univariatemodels_url, headers=self.header, json=post_dict
             ) as response:
                 try:
                     response.raise_for_status()
                 except aiohttp.ClientResponseError as e:
                     self.logger.error(
-                        "Failed to submit DTO task: Status %s, Reason %s",
+                        "Failed to submit UnivariateModels task: Status %s, Reason %s",
                         e.status,
                         e.message,
                     )
@@ -113,7 +92,8 @@ class DtoAPI(AbstractRecordsOnlyAPI):
         :param group_task_id: The task ID to retrieve results for.
         :param timeout: The maximum time to wait for the task to complete (in seconds).
         :param polling_interval: The time to wait between status checks (in seconds).
-        :return: Records from the DTO API of the successfully completed task.
+        :return: Records from the UnivariateModels API of the successfully completed
+            task.
 
         """
         # Start time for timeout check
@@ -160,7 +140,7 @@ class DtoAPI(AbstractRecordsOnlyAPI):
                     await asyncio.sleep(polling_interval)
 
     def create(self, data: dict[str, Any], **kwargs) -> requests.Response:
-        raise NotImplementedError("The DTO does not support create.")
+        raise NotImplementedError("The UnivariateModels does not support create.")
 
     def update(self, df: pd.DataFrame, **kwargs: Any) -> requests.Response:
         """
@@ -199,9 +179,9 @@ class DtoAPI(AbstractRecordsOnlyAPI):
 
     def delete(self, id: str, **kwargs) -> Any:
         """
-        Delete a DTO record from the database.
+        Delete a UnivariateModels record from the database.
 
-        :param id: The ID of the DTO record to delete.
+        :param id: The ID of the UnivariateModels record to delete.
         :return: A dictionary with a status message indicating success or failure.
 
         """
@@ -213,79 +193,10 @@ class DtoAPI(AbstractRecordsOnlyAPI):
         response = requests.delete(f"{self.url}/{id}/", headers=headers, **kwargs)
 
         if response.status_code == 204:
-            return {"status": "success", "message": "DTO deleted successfully."}
+            return {
+                "status": "success",
+                "message": "UnivariateModels deleted successfully.",
+            }
 
         # Raise an error if the response indicates failure
         response.raise_for_status()
-
-    def parse_metadata(self, metadata: pd.DataFrame) -> pd.DataFrame:
-        """
-        Parse the metadata from the DTO API.
-
-        :param metadata: The metadata DataFrame to parse.
-        :return: The parsed metadata DataFrame.
-        :raises KeyError: If the metadata DataFrame is missing required columns.
-
-        """
-        if metadata.empty:
-            self.logger.warning("Metadata is empty")
-            return metadata
-
-        output_columns = [
-            "id",
-            "promotersetsig",
-            "expression",
-            "regulator_symbol",
-            "binding_source",
-            "expression_source",
-        ]
-
-        # required columns are "result" and output_columns
-        missing_req_columns = [
-            col for col in ["result"] + output_columns if col not in metadata.columns
-        ]
-        if missing_req_columns:
-            raise KeyError(
-                "Metadata is missing required columns: "
-                "{', '.join(missing_req_columns)}"
-            )
-
-        dto_results_list = []
-
-        # Check and rename keys, logging a warning if a key is missing
-        keys_to_rename = {
-            "rank1": "binding_rank_threshold",
-            "rank2": "perturbation_rank_threshold",
-            "set1_len": "binding_set_size",
-            "set2_len": "perturbation_set_size",
-        }
-
-        for _, row in metadata.iterrows():
-            dto_results = json.loads(row.result.replace("'", '"'))
-
-            for old_key, new_key in keys_to_rename.items():
-                if old_key in dto_results:
-                    dto_results[new_key] = dto_results.pop(old_key)
-                else:
-                    self.logger.warning(
-                        f"Key '{old_key}' missing in row with id '{row.id}'."
-                    )
-
-            dto_results["id"] = row.id
-            dto_results["promotersetsig"] = row.promotersetsig
-            dto_results["expression"] = row.expression
-            dto_results["regulator_symbol"] = row.regulator_symbol
-            dto_results["binding_source"] = row.binding_source
-            dto_results["expression_source"] = row.expression_source
-
-            dto_results_list.append(dto_results)
-
-        # Create DataFrame
-        result_df = pd.DataFrame(dto_results_list)
-
-        # Reorder columns: output_columns first, followed by others
-        reordered_columns = output_columns + [
-            col for col in result_df.columns if col not in output_columns
-        ]
-
-        return result_df.loc[:, reordered_columns]
