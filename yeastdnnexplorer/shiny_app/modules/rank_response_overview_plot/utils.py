@@ -13,8 +13,8 @@ def create_rank_response_overview_plot(df: pd.DataFrame) -> go.Figure:
     and select a point to view its metadata.
 
     :param df: the rank response metadata table
-
     :return: a Plotly figure
+
     """
     fig = go.Figure()
 
@@ -72,7 +72,7 @@ def create_rank_response_overview_plot(df: pd.DataFrame) -> go.Figure:
     return fig
 
 
-## Example
+# Example
 
 # %%
 # Set up the environment

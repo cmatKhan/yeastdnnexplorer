@@ -47,8 +47,8 @@ def create_dto_overview_plot(
 
     :param df: the rank response metadata table
     :param measure_colname: the column name of the measure to plot
-
     :return: a Plotly figure
+
     """
     fig = go.Figure()
 
@@ -106,7 +106,7 @@ def create_dto_overview_plot(
     return fig
 
 
-## Example
+# Example
 
 # %%
 # Set up the environment

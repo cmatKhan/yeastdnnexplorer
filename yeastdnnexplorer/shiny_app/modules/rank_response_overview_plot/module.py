@@ -1,6 +1,6 @@
 import logging
 
-from shiny import Inputs, Outputs, Session, module, reactive, render, req, ui
+from shiny import Inputs, Outputs, Session, module, reactive, ui
 from shinywidgets import output_widget, render_plotly
 
 from .utils import create_rank_response_overview_plot
