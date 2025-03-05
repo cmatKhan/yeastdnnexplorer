@@ -237,6 +237,7 @@ def dataset_filters_server(
                     "kemmeren": "kemmeren_tfko",
                     "hu_reimann": "hu_reimann_tfko",
                 }
+                source_set = [source_lookup[x] for x in tfko_source]
                 tfko_keys = ["replicate", "preferred_replicate"]
                 try:
                     for key in tfko_keys:
@@ -251,10 +252,10 @@ def dataset_filters_server(
                                 ]
                             df = df[
                                 (
-                                    (df.source_name.isin(source_lookup[tfko_source]))
+                                    (df.source_name.isin(source_set))
                                     & df[key].isin(tfko_filter_value)
                                 )
-                                | (~df.source_name.isin(source_lookup[tfko_source]))
+                                | (~df.source_name.isin(source_set))
                             ]
                 except SilentException:
                     logger.debug(
