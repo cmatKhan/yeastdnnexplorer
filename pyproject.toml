@@ -32,6 +32,8 @@ requests-toolbelt = "^1.0.0"
 joblib = "^1.4.2"
 matplotlib = "^3.9.2"
 seaborn = "^0.13.2"
+numdifftools = "^0.9.41"
+lmfit = "^1.2.2"
 
 [tool.poetry.group.dev.dependencies]
 jupyter = "^1.0.0"

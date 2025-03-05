@@ -372,6 +372,13 @@ def bootstrap_stratified_cv_modeling(
             X_resampled.loc[:, response_tf].squeeze(), Y_resampled.squeeze()
         )
 
+        # this is the second part of the code for the edge case in which during
+        # sequential modeling we do not find the main effect to be significant
+        # in the first place, therefore we must ignore it for modeling purposes
+        ignore_main_effects = kwargs.get("ignore_main_effect", False)
+        if ignore_main_effects:
+            X_resampled = X_resampled.drop([response_tf], axis=1)
+
         model_i = stratified_cv_modeling(
             Y_resampled,
             X_resampled,
@@ -385,7 +392,11 @@ def bootstrap_stratified_cv_modeling(
     # Convert coefficients list to a DataFrame with column names from X
     bootstrap_coefs_df = pd.DataFrame(
         bootstrap_coefs,
-        columns=X.columns,
+        # this is the fourth part of the code that handles the edge case where you drop
+        # the main effect if needed
+        columns=(
+            X.drop(columns=[response_tf]).columns if ignore_main_effects else X.columns
+        ),
     )
 
     # Compute confidence intervals
@@ -507,10 +518,11 @@ def examine_bootstrap_coefficients(
 
     # Identify coefficients with confidence intervals entirely above or
     # below the threshold, with a minimum distance from zero.
+    # We always ignore the Intercept because it is not a true predictor
     significant_coefs_dict = {
         coef: bounds
         for coef, bounds in ci_dict_local[ci_level].items()
-        if bounds[0] > threshold or bounds[1] < -threshold
+        if coef != "Intercept" and (bounds[0] > threshold or bounds[1] < -threshold)
     }
 
     # Display selected coefficients and their intervals
@@ -583,13 +595,29 @@ def get_significant_predictors(
             "Must be one of ['lassocv_ols', 'bootstrap_lassocv']"
         )
 
+    # this is the first part of the code that checks for the particular scenario in
+    # which the main effect isn't in the formula if it is not there, then we must add it
+    # when generating the modeling data, and then ignore it for the actual modeling
+    # which is done by the other part of the code in this method and in
+    # bootstrap_cv_modeling
+    # TODO: modify generate_modeling_data to avoid the requirement of having the
+    # main effect in the columns
+    formula = kwargs.get("formula", None)
+    if formula:
+        lhs, rhs = formula.split("~")
+        rhs = rhs.strip()
+        rhs_terms = [term.strip() for term in rhs.split("+")]
+
+        if perturbed_tf not in rhs_terms:
+            formula = f"{lhs.strip()} ~ {rhs} + {perturbed_tf}"
+
     y, X = generate_modeling_data(
         perturbed_tf,
         response_df,
         predictors_df,
         quantile_threshold=kwargs.get("quantile_threshold", None),
         drop_intercept=True,
-        formula=kwargs.get("formula", None),  # Pass formula from kwargs
+        formula=formula,  # Pass formula from kwargs
     )
 
     # NOTE: fit_intercept is set to `true`
@@ -634,6 +662,28 @@ def get_significant_predictors(
         # bootstrap_stratified_cv_modeling function to use the same set of lambdas
         lassoCV_estimator.alphas_ = lasso_model.alphas_
 
+        # this is the third part specifically checks an edge case in sequential modeling
+        # where after the lasso model on all genes is run and the main effect isn't
+        # considered significant. Thus, we cannot consider it further, but we still need
+        # to use it in this method to stratify datapoints for bootstrapping. This check
+        # will enure that during bootstrap_stratified_cv_modeling we ultimately don't
+        # also pass in the main effect
+        # NOTE: hacky, because generate_modeling_data() requires main effect.
+        # See issue in git.
+        formula = kwargs.get("formula", None)
+        ignore_main_effect = False  # Default to False
+
+        if formula:
+            # Extract the right-hand side (RHS) of the formula (everything after `~`)
+            rhs = formula.split("~")[-1].strip()
+
+            # Tokenize by splitting on "+" and stripping spaces
+            rhs_terms = [term.strip() for term in rhs.split("+")]
+
+            # Check if `perturbed_tf` is missing from the RHS terms
+            if perturbed_tf not in rhs_terms:
+                ignore_main_effect = True
+
         logging.info("running bootstraps")
         bootstrap_lasso_output = bootstrap_stratified_cv_modeling(
             y=y,
@@ -645,6 +695,7 @@ def get_significant_predictors(
             fit_intercept=True,
             selection="random",
             random_state=42,
+            ignore_main_effect=ignore_main_effect,
         )
 
         sig_coef_plt, sig_coef_dict = examine_bootstrap_coefficients(
