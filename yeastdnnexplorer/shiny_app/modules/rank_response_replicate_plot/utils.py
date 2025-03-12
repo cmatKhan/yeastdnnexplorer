@@ -140,8 +140,8 @@ def create_rank_response_replicate_plot(plots_dict):
 
 # ## Example
 
-# # %%
-# # Set up the environment
+# %%
+# Set up the environment
 # import dotenv
 
 # from yeastdnnexplorer.interface import *
@@ -160,13 +160,17 @@ def create_rank_response_replicate_plot(plots_dict):
 # rr_api.push_params(
 #     {
 #         "regulator_symbol": "OAF1",
+#         "expression_conditions": "expression_source=mcisaac_oe,time=15"
 #     }
 # )
 
-# rr_dict = await rr_api.read()
+# rr_dict = await rr_api.read(retrieve_files=True)
 
 # # %%
 # plots = prepare_rank_response_data(rr_dict)
 
 # # %%
 # x = create_rank_response_replicate_plot(plots)
+
+# %%
+# to show data, do x.get(<id>).show()

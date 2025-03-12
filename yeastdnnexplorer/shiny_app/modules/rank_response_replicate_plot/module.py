@@ -188,13 +188,19 @@ def rank_response_replicate_plot_server(
                 plots_dict
             ).items():
                 plot_id = f"plot_{source}_{expression_id}"
-                promotersetsig_selected = _promotersetsig_selected.get()
+                # see note below
+                # promotersetsig_selected = _promotersetsig_selected.get()
                 for trace in fig["data"]:
-                    trace["visible"] = (
-                        "legendonly"
-                        if trace["name"] not in promotersetsig_selected
-                        else True
-                    )
+                    trace["visible"] = True
+                    # NOTE: this was here b/c I wanted there to be a way to
+                    # select which traces to show based on other reactives, ie
+                    # promotersetsig_selected. But, adding it means that the
+                    # CI aren't shown for some reason
+                    # (
+                    #     "legendonly"
+                    #     if trace["name"] not in promotersetsig_selected
+                    #     else True
+                    # )
 
                 @output(id=plot_id)
                 @render_plotly
