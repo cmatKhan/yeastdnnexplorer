@@ -38,6 +38,28 @@ class DtoAPI(AbstractRecordsOnlyAPI):
             **kwargs,
         )
 
+    async def read(self, *args, **kwargs) -> Any:
+        """
+        Override the read() method to use a custom callback that parses metadata.
+
+        :param callback: The function to call with the metadata. Defaults to parsing
+            metadata.
+        :type callback: Callable[[pd.DataFrame, dict[str, Any] | None, Any], Any]
+        :return: The result of the callback function.
+        :rtype: Any
+
+        """
+
+        # Define the default callback
+        def dto_callback(metadata, data, cache, **kwargs):
+            return {"metadata": self.parse_metadata(metadata), "data": data}
+
+        # Explicitly set the callback argument to dto_callback
+        kwargs["callback"] = dto_callback
+
+        # Call the superclass method with updated kwargs
+        return await super().read(*args, **kwargs)
+
     async def submit(
         self,
         post_dict: dict[str, Any],
@@ -195,3 +217,79 @@ class DtoAPI(AbstractRecordsOnlyAPI):
 
         # Raise an error if the response indicates failure
         response.raise_for_status()
+
+    def parse_metadata(self, metadata: pd.DataFrame) -> pd.DataFrame:
+        """
+        Parse the metadata from the DTO API.
+
+        :param metadata: The metadata DataFrame to parse.
+        :return: The parsed metadata DataFrame.
+        :raises KeyError: If the metadata DataFrame is missing required columns.
+
+        """
+        if metadata.empty:
+            self.logger.warning("Metadata is empty")
+            return metadata
+
+        output_columns = [
+            "id",
+            "promotersetsig",
+            "expression",
+            "regulator_symbol",
+            "binding_source",
+            "expression_source",
+            "passing_fdr",
+            "passing_pvalue",
+        ]
+
+        # required columns are "result" and output_columns
+        missing_req_columns = [
+            col for col in ["result"] + output_columns if col not in metadata.columns
+        ]
+        if missing_req_columns:
+            raise KeyError(
+                "Metadata is missing required columns: "
+                "{', '.join(missing_req_columns)}"
+            )
+
+        dto_results_list = []
+
+        # Check and rename keys, logging a warning if a key is missing
+        keys_to_rename = {
+            "rank1": "binding_rank_threshold",
+            "rank2": "perturbation_rank_threshold",
+            "set1_len": "binding_set_size",
+            "set2_len": "perturbation_set_size",
+        }
+
+        for _, row in metadata.iterrows():
+            dto_results = json.loads(row.result.replace("'", '"'))
+
+            for old_key, new_key in keys_to_rename.items():
+                if old_key in dto_results:
+                    dto_results[new_key] = dto_results.pop(old_key)
+                else:
+                    self.logger.warning(
+                        f"Key '{old_key}' missing in row with id '{row.id}'."
+                    )
+
+            dto_results["id"] = row.id
+            dto_results["promotersetsig"] = row.promotersetsig
+            dto_results["expression"] = row.expression
+            dto_results["regulator_symbol"] = row.regulator_symbol
+            dto_results["binding_source"] = row.binding_source
+            dto_results["expression_source"] = row.expression_source
+            dto_results["passing_fdr"] = row.passing_fdr
+            dto_results["passing_pvalue"] = row.passing_pvalue
+
+            dto_results_list.append(dto_results)
+
+        # Create DataFrame
+        result_df = pd.DataFrame(dto_results_list)
+
+        # Reorder columns: output_columns first, followed by others
+        reordered_columns = output_columns + [
+            col for col in result_df.columns if col not in output_columns
+        ]
+
+        return result_df.loc[:, reordered_columns]
