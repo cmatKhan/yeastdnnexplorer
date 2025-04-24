@@ -612,6 +612,7 @@ def sigmoid_bootstrap_worker(
         bootstrap_data.model_df,
         bootstrap_data.response_df.values.ravel(),
         sample_weight=sample_weights,
+        minimize_options=args.minimize_options,
     )
 
     result_row = {
