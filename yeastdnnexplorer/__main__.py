@@ -503,7 +503,7 @@ def insert_result(
     rng = np.random.default_rng(seed=i)
 
     for attempt in range(max_retries):
-        logger.info(
+        logger.debug(
             f"Attempting to write bootstrap {i} to {db_path} "
             f"(attempt {attempt + 1}/{max_retries})"
         )
@@ -515,7 +515,7 @@ def insert_result(
                 os.fsync(f.fileno())  # ensure it's written to disk
                 fcntl.flock(f, fcntl.LOCK_UN)
 
-            logger.info(f"Successfully wrote bootstrap {i} to {db_path}.")
+            logger.debug(f"Successfully wrote bootstrap {i} to {db_path}.")
             return
         except Exception as e:
             logger.warning(f"[{i}] Write failed with error: {e}. Retrying...")
@@ -607,7 +607,7 @@ def sigmoid_bootstrap_worker(
     folds = list(skf.split(bootstrap_data.model_df, classes))
 
     estimator = SigmoidModel(warm_start=args.warm_start, alphas=args.alphas, cv=folds)
-    logger.info("Fitting the model with bootstrap sample weights")
+    logger.info(f"Fitting model for bootstrap {args.bootstrap_idx}")
     estimator.fit(
         bootstrap_data.model_df,
         bootstrap_data.response_df.values.ravel(),
