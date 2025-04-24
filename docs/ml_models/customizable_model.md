@@ -1,1 +1,0 @@
-::: yeastdnnexplorer.ml_models.customizable_model.CustomizableModel

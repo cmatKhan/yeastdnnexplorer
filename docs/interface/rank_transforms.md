@@ -6,4 +6,4 @@
 
 <h2>Negative Log Transform by P-Value and Enrichment</h2>
 
-::: yeastdnnexplorer.interface.rank_transforms.negative_log_transform_by_pvalue_and_enrichment
+::: yeastdnnexplorer.interface.rank_transforms.transform

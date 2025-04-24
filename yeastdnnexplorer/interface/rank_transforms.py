@@ -20,7 +20,9 @@ def shifted_negative_log_ranks(ranks: np.ndarray) -> np.ndarray:
     return -1 * np.log10(ranks) + log_max_rank
 
 
-def stable_rank(pvalue_vector: np.ndarray, enrichment_vector: np.ndarray) -> np.ndarray:
+def stable_rank(
+    pvalue_vector: np.ndarray, enrichment_vector: np.ndarray, method="average"
+) -> np.ndarray:
     """
     Ranks data by primary_column, breaking ties based on secondary_column. The expected
     primary and secondary columns are 'pvalue' and 'enrichment', respectively. Then the
@@ -29,6 +31,9 @@ def stable_rank(pvalue_vector: np.ndarray, enrichment_vector: np.ndarray) -> np.
 
     :param pvalue_vector: A vector of pvalues
     :param enrichment_vector: A vector of enrichment values corresponding to the pvalues
+    :param method: The method to use for final ranking. Default is "average".
+        See `rankdata`
+
     :return np.ndarray: A vector of negative log10 transformed ranks shifted such that
         the lowest value is 0 and the highest value is log10(min_rank)
     :raises ValueError: If the primary or secondary column is not numeric.
@@ -84,13 +89,41 @@ def stable_rank(pvalue_vector: np.ndarray, enrichment_vector: np.ndarray) -> np.
             )
 
     # Step 4: Final rank based on the adjusted primary ranks
-    final_ranks = rankdata(adjusted_primary_rank, method="average")
+    final_ranks = rankdata(adjusted_primary_rank, method=method)
 
     return final_ranks
 
 
-def negative_log_transform_by_pvalue_and_enrichment(
-    pvalue_vector: np.ndarray, enrichment_vector: np.ndarray
+def rank_by_pvalue(pvalue_vector: np.ndarray, method="average") -> np.ndarray:
+    """
+    This expects a vector of pvalues, returns a vector of ranks where the lowest pvalue
+    has the lowest rank.
+
+    :param pvalue_vector: A vector of pvalues
+    :param enrichment_vector: A vector of enrichment values corresponding to the pvalues
+    :param method: The method to use for ranking. Default is "average". See `rankdata`
+    :return np.ndarray: A vector of negative log10 transformed ranks shifted such that
+        the lowest value is 0 and the highest value is log10(min_rank)
+    :raises ValueError: If the primary or secondary column is not numeric.
+
+    """
+
+    # Check if primary and secondary columns are numeric
+    if not np.issubdtype(pvalue_vector.dtype, np.number):
+        raise ValueError("`primary_vector` must be a numeric")
+
+    # Step 1: Rank by primary_column
+    # note that this will now always be an integer, unlike average which could return
+    # decimal values making adding the secondary rank more difficult
+    return rankdata(pvalue_vector, method=method)
+
+
+def transform(
+    pvalue_vector: np.ndarray,
+    enrichment_vector: np.ndarray,
+    use_enrichment: bool = True,
+    negative_log_shift: bool = True,
+    **kwargs,
 ) -> np.ndarray:
     """
     This calls the rank() function and then transforms the ranks to negative log10
@@ -99,12 +132,23 @@ def negative_log_transform_by_pvalue_and_enrichment(
 
     :param pvalue_vector: A vector of pvalues
     :param enrichment_vector: A vector of enrichment values corresponding to the pvalues
+    :param use_enrichment: Set to True to use the enrichment vector to break ties.
+        Default is True. If False, pvalues will be ranked directly with method="average'
+    :param negative_log_shift: Set to True to shift the ranks to the right such that the
+        lowest value (largest rank, least important) is 0. Default is True.
+    :param kwargs: Additional keyword arguments to pass to the rank() function (e.g.
+        method="min")
     :return np.ndarray: A vector of negative log10 transformed ranks shifted such that
         the lowest value is 0 and the highest value is log10(min_rank)
     :raises ValueError: If the primary or secondary column is not numeric.
 
     """
+    if use_enrichment:
+        ranks = stable_rank(pvalue_vector, enrichment_vector, **kwargs)
+    else:
+        ranks = rank_by_pvalue(pvalue_vector, **kwargs)
 
-    final_ranks = stable_rank(pvalue_vector, enrichment_vector)
-
-    return shifted_negative_log_ranks(final_ranks)
+    if negative_log_shift:
+        return shifted_negative_log_ranks(ranks)
+    else:
+        return ranks

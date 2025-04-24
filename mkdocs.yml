@@ -35,43 +35,29 @@ markdown_extensions:
   - sane_lists
   - pymdownx.arithmatex:
       generic: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: "!!python/name:pymdownx.superfences.fence_code_format"
 
 extra_javascript:
   - javascripts/mathjax.js
   - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+  - https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js
+  - js/init-mermaid.js
 
 nav:
 - Home: index.md
 - Tutorials:
-  - Generate In-silico Data: tutorials/generate_in_silico_data.ipynb
   - Database Interface: tutorials/database_interface.ipynb
-  - Hyperparameter Sweep: tutorials/hyperparameter_sweep.ipynb
-  - Lightning Crash Course: tutorials/lightning_crash_course.ipynb
-  - Testing Model Metrics: tutorials/testing_model_metrics.ipynb
-  - Visualizing and Testing Data Generation Methods: tutorials/visualizing_and_testing_data_generation_methods.ipynb
-  - Generalized Logistic Models: tutorials/generalized_logistic_models.ipynb
   - LassoCV: tutorials/lassoCV.ipynb
   - Interactor Modeling Workflow: tutorials/interactor_modeling_workflow.ipynb
 - API:
-  - Data Loaders:
-    - Synthetic Data Loader: data_loaders/synthetic_data_loader.md
-    - Real Data Loader: data_loaders/real_data_loader.md
   - Models:
-    - ml_models/customizable_model.md
-    - ml_models/metrics_compute_nrmse.md
-    - ml_models/metrics_smse.md
-    - ml_models/simple_model.md
-    - ml_models/GeneralizedLogisticModel.md
-    - ml_models/lasso_modeling.md
-  - Probability Models:
-    - probability_models/default_perturbation_effect_adjustment_function.md
-    - probability_models/GenePopulation.md
-    - probability_models/generate_binding_effects.md
-    - Generate Gene Population: probability_models/generate_gene_population.md
-    - probability_models/generate_perturbation_effects.md
-    - probability_models/generate_pvalues.md
-    - probability_models/perturbation_effect_adjustment_function_with_tf_relationships_boolean_logic.md
-    - probability_models/perturbation_effect_adjustment_function_with_tf_relationships.md
+    - Overview: ml_models/index.md
+    - SigmoidModel: ml_models/SigmoidModel.md
+    - Lasso Modeling: ml_models/lasso_modeling.md
   - Database Interface:
     - Records Only Classes:
       - interface/BindingManualQCAPI.md
@@ -94,9 +80,3 @@ nav:
       - interface/AbstractRecordsOnlyAPI.md
       - interface/Cache.md
       - interface/ParamsDict.md
-    - Data Transformers:
-      - metric_arrays: interface/metric_arrays.md
-      - rank_transforms: interface/rank_transforms.md
-  - Utils:
-    - sigmoid: utils/sigmoid.md
-    - InteractorDiagnosticPlot: utils/InteractorDiagnosticPlot.md

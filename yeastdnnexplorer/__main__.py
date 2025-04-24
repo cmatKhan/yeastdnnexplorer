@@ -1,28 +1,29 @@
 import argparse
+import fcntl
 import json
 import logging
 import os
 import random
-import re
+import shutil
 import time
 from typing import Literal
 
-import joblib
 import numpy as np
-import pandas as pd
+
+# import pandas as pd
+# from filelock import FileLock, Timeout
 from shiny import run_app
 from sklearn.linear_model import LassoCV
+from sklearn.model_selection import StratifiedKFold
 
 from yeastdnnexplorer.ml_models.lasso_modeling import (
-    OLSFeatureSelector,
+    BootstrappedModelingInputData,
+    ModelingInputData,
     bootstrap_stratified_cv_modeling,
-    generate_modeling_data,
-    get_interactor_importance,
-    get_significant_predictors,
+    evaluate_interactor_significance,
     stratification_classification,
-    stratified_cv_modeling,
-    stratified_cv_r2,
 )
+from yeastdnnexplorer.ml_models.SigmoidModel import SigmoidModel
 from yeastdnnexplorer.utils import LogLevel, configure_logger
 
 logger = logging.getLogger("main")
@@ -79,480 +80,633 @@ def run_shiny(args: argparse.Namespace) -> None:
 #     print(f"Running another command with parameter: {args.param}")
 
 
-def run_lasso_bootstrap(args: argparse.Namespace) -> None:
+def perturbation_binding_modeling(args):
     """
-    Run LassoCV with bootstrap resampling on a specified transcription factor.
-
-    :param args: The parsed command-line arguments.
-
+    :param args: Command-line arguments containing input file paths and parameters.
     """
-    output_dirpath = os.path.join(args.output_dir, args.response_tf)
-    if os.path.exists(output_dirpath):
-        raise FileExistsError(
-            f"File {output_dirpath} already exists. "
-            "Please specify a different `output_dir`."
-        )
+    if not isinstance(args.max_iter, int) or args.max_iter < 1:
+        raise ValueError("The `max_iter` parameter must be a positive integer.")
+
+    max_iter = int(args.max_iter)
+
+    logger.info(f"estimator max_iter: {max_iter}.")
+
+    logger.info("Step 1: Preprocessing")
+
+    # validate input files/dirs
+    if not os.path.exists(args.response_file):
+        raise FileNotFoundError(f"File {args.response_file} does not exist.")
+    if not os.path.exists(args.predictors_file):
+        raise FileNotFoundError(f"File {args.predictors_file} does not exist.")
+    if os.path.exists(args.output_dir):
+        logger.warning(f"Output directory {args.output_dir} already exists.")
     else:
         os.makedirs(args.output_dir, exist_ok=True)
-        # Ensure the entire output directory path exists
-        os.makedirs(output_dirpath, exist_ok=True)
-    if not os.path.exists(args.response_file):
-        raise FileNotFoundError(f"File {args.response_file} does not exist.")
-    if not os.path.exists(args.predictors_file):
-        raise FileNotFoundError(f"File {args.predictors_file} does not exist.")
+        logger.info(f"Output directory created at {args.output_dir}")
 
-    # Load data
-    Y_filtered_transformed = pd.read_csv(args.response_file, index_col=0)
-    predictors_df = pd.read_csv(args.predictors_file, index_col=0)
-
-    # Generate modeling data
-    y, X = generate_modeling_data(
-        colname=args.response_tf,
-        response_df=Y_filtered_transformed,
-        predictors_df=predictors_df,
-        drop_intercept=True,
-        quantile_threshold=args.data_quantile,
-        formula=args.formula,
+    # the output subdir is where the output of this modeling run will be saved
+    output_subdir = os.path.join(
+        args.output_dir, os.path.join(args.perturbed_tf + args.output_suffix)
     )
-
-    # Configure and fit LassoCV estimator
-    lassoCV_estimator = LassoCV(
-        fit_intercept=True,
-        max_iter=10000,
-        selection="random",
-        random_state=42,
-        n_jobs=4,
-    )
-
-    if re.match("_rep\\d+", y.columns[0]):
-        logger.debug(
-            "Removing replicate suffix from the column name "
-            "to create the stratification classes."
-        )
-
-    regulator_tf = re.sub("_rep\\d+", "", y.columns[0])
-
-    try:
-        classes = stratification_classification(X[regulator_tf].squeeze(), y.squeeze())
-    except KeyError as exc:
-        raise RuntimeError(
-            f"column {regulator_tf} not found in predictors dataframe."
-        ) from exc
-
-    # Fit the model to extract alphas
-    try:
-        lasso_model = stratified_cv_modeling(y, X, classes, lassoCV_estimator)
-    except Exception as exc:
-        raise RuntimeError(
-            f"Failed to fit the LassoCV model on {args.response_tf}."
-        ) from exc
-
-    # Set the alphas of the main estimator for bootstrap consistency
-    lassoCV_estimator.alphas_ = lasso_model.alphas_
-
-    # Run bootstrap modeling
-    try:
-        bootstrap_output = bootstrap_stratified_cv_modeling(
-            y=y,
-            X=X,
-            estimator=lassoCV_estimator,
-            bootstrap_cv=True,
-            n_bootstraps=args.n_bootstraps,
-            ci_percentiles=[90.0, 95.0, 99.0, 100.0],
-            max_iter=10000,
-            fit_intercept=True,
-            selection="random",
-            random_state=42,
-        )
-    except Exception as exc:
-        raise RuntimeError(
-            f"Failed to run bootstrap modeling on {args.response_tf}."
-        ) from exc
-
-    # the lasso_model and bootstrap_output in output_dirpath. boostrap_output is a
-    # is a tuple where the first value is a dictionary called "ci_dict",
-    # the second is a data frame called "bootstrap_coef_df",
-    # and the third is a list called "bootstrap_alphas".
-
-    # Save the fitted Lasso model
-    lasso_model_path = os.path.join(output_dirpath, "lasso_model.joblib")
-    joblib.dump(lasso_model, lasso_model_path)
-
-    # Save ci_dict as JSON
-    ci_dict = bootstrap_output[0]
-    ci_dict_path = os.path.join(output_dirpath, "ci_dict.json")
-    with open(ci_dict_path, "w") as f:
-        json.dump(ci_dict, f, indent=4)
-
-    # Save bootstrap_coef_df as CSV
-    bootstrap_coef_df = bootstrap_output[1]
-    bootstrap_coef_df_path = os.path.join(output_dirpath, "bootstrap_coef_df.csv")
-    bootstrap_coef_df.to_csv(bootstrap_coef_df_path, index=False)
-
-    # Save bootstrap_alphas as CSV
-    bootstrap_alphas = pd.DataFrame(bootstrap_output[2], columns=["alpha"])
-    bootstrap_alphas_path = os.path.join(output_dirpath, "bootstrap_alphas.csv")
-    bootstrap_alphas.to_csv(bootstrap_alphas_path, index=False)
-
-
-# 12/1: new attempt
-
-
-def find_interactors_workflow(args: argparse.Namespace) -> None:
-    """
-    Run the find_interactors_workflow with the specified arguments.
-
-    :param args: The parsed command-line arguments.
-
-    """
-    output_dirpath = os.path.join(args.output_dir, args.response_tf)
-    if os.path.exists(output_dirpath):
+    if os.path.exists(output_subdir):
         raise FileExistsError(
-            f"Directory {output_dirpath} already exists. "
+            f"Directory {output_subdir} already exists. "
             "Please specify a different `output_dir`."
         )
     else:
-        os.makedirs(output_dirpath, exist_ok=True)
-    if not os.path.exists(args.response_file):
-        raise FileNotFoundError(f"File {args.response_file} does not exist.")
-    if not os.path.exists(args.predictors_file):
-        raise FileNotFoundError(f"File {args.predictors_file} does not exist.")
+        os.makedirs(output_subdir, exist_ok=True)
+        logger.info(f"Output subdirectory created at {output_subdir}")
 
-    # Load data
-    response_df = pd.read_csv(args.response_file, index_col=0)
-    predictors_df = pd.read_csv(args.predictors_file, index_col=0)
+    try:
+        all_data_bootstrap_indicies = (
+            BootstrappedModelingInputData.load_indices(args.all_data_bootstrap_indicies)
+            if args.all_data_bootstrap_indicies
+            else None
+        )
+    except FileNotFoundError:
+        logger.error(
+            f"Bootstrap indices file {args.all_data_bootstrap_indicies} not found."
+        )
+        raise
 
-    # Step 1: Run LassoCV, possibly with the bootstrap depending on args.method
-    lasso_res = {
-        "all": get_significant_predictors(
-            args.method,
-            args.response_tf,
-            response_df,
-            predictors_df,
-            ci_percentile=args.all_ci_percentile,
-            n_bootstraps=args.n_bootstraps,
-            add_max_lrb=True,
+    try:
+        topn_data_bootstrap_indicies = (
+            BootstrappedModelingInputData.load_indices(
+                args.topn_data_bootstrap_indicies
+            )
+            if args.topn_data_bootstrap_indicies
+            else None
+        )
+    except FileNotFoundError:
+        logger.error(
+            f"Bootstrap indices file {args.topn_data_bootstrap_indicies} not found."
+        )
+        raise
+
+    # if the bootstrap indicies are not provided, then set the number of bootstraps
+    # to the value passed in via the command line
+    all_data_n_bootstraps = None if all_data_bootstrap_indicies else args.n_bootstraps
+    topn_data_n_bootstraps = None if topn_data_bootstrap_indicies else args.n_bootstraps
+
+    # instantiate a estimator
+    # NOTE: fit_intercept is set to `true`. This means the intercept WILL BE fit
+    # DO NOT add a constant vector to the predictors.
+    estimator = LassoCV(
+        fit_intercept=True,
+        selection="random",
+        n_alphas=100,
+        random_state=42,
+        n_jobs=args.n_cpus,
+        max_iter=max_iter,
+    )
+
+    input_data = ModelingInputData.from_files(
+        response_path=args.response_file,
+        predictors_path=args.predictors_file,
+        perturbed_tf=args.perturbed_tf,
+        feature_blacklist_path=args.blacklist_file,
+        top_n=args.top_n,
+    )
+
+    logger.info("Step 2: Bootstrap LassoCV on all data, full interactor model")
+
+    # Unset the top n masking -- we want to use all the data for the first round
+    # modeling
+    input_data.top_n_masked = False
+
+    # extract a list of predictor variables, which are the columns of the predictors_df
+    predictor_variables = input_data.predictors_df.columns.drop(input_data.perturbed_tf)
+
+    # drop any variables which are in args.exclude_interactor_variables
+    predictor_variables = [
+        var
+        for var in predictor_variables
+        if var not in args.exclude_interactor_variables
+    ]
+
+    # create a list of interactor terms with the perturbed_tf as the first term
+    interaction_terms = [
+        f"{input_data.perturbed_tf}:{var}" for var in predictor_variables
+    ]
+    # Construct the full interaction formula, ie perturbed_tf + perturbed_tf:other_tf1 +
+    # perturbed_tf:other_tf2 + ... .
+    all_data_formula = f"{input_data.perturbed_tf} + {' + '.join(interaction_terms)}"
+
+    if args.squared_pTF:
+        # if --squared_pTF is passed, then add the squared perturbed TF to the formula
+        squared_term = f"I({input_data.perturbed_tf} ** 2)"
+        logger.info(f"Adding squared term to model formula: {squared_term}")
+        all_data_formula += f" + {squared_term}"
+
+    # if --row_max is passed, then add "row_max" to the formula
+    if args.row_max:
+        logger.info("Adding `row_max` to the all data model formula")
+        all_data_formula += " + row_max"
+
+    # if --add_model_variables is passed, then add the variables to the formula
+    if args.add_model_variables:
+        logger.info(
+            f"Adding model variables to the all data model "
+            f"formula: {args.add_model_variables}"
+        )
+        all_data_formula += " + " + " + ".join(args.add_model_variables)
+
+    # log the formula
+    logger.info(f"All data formula for the full interactor model: {all_data_formula}")
+
+    # create the bootstrapped data.
+    bootstrapped_data_all = BootstrappedModelingInputData(
+        response_df=input_data.response_df,
+        model_df=input_data.get_modeling_data(
+            all_data_formula, add_row_max=args.row_max, drop_intercept=True
         ),
-        "top": get_significant_predictors(
-            args.method,
-            args.response_tf,
-            response_df,
-            predictors_df,
-            ci_percentile=args.top_ci_percentile,
-            n_bootstraps=args.n_bootstraps,
-            add_max_lrb=True,
-            quantile_threshold=args.data_quantile,
+        n_bootstraps=all_data_n_bootstraps,
+        bootstrap_indices=all_data_bootstrap_indicies,
+    )
+
+    if not all_data_bootstrap_indicies:
+        all_data_indicies_output_file = os.path.join(
+            output_subdir, "all_data_bootstrap_indices.json"
+        )
+        logger.info(
+            "Saving the bootstrap indices for the all "
+            f"data model to {all_data_indicies_output_file}"
+        )
+        bootstrapped_data_all.save_indices(all_data_indicies_output_file)
+    else:
+        logger.info(
+            "Using the provided bootstrap indices for the all data model from "
+            f"{args.all_data_bootstrap_indicies}"
+        )
+
+    logger.info(
+        f"Running bootstrap LassoCV on all data with {args.n_bootstraps} bootstraps"
+    )
+    all_data_results = bootstrap_stratified_cv_modeling(
+        bootstrapped_data_all,
+        input_data.predictors_df[input_data.perturbed_tf],
+        estimator=estimator,
+        use_sample_weight_in_cv=args.use_weights_in_cv,
+        ci_percentiles=[float(args.all_data_ci_level)],
+        bin_by_binding_only=args.bin_by_binding_only,
+        bins=args.bins,
+    )
+
+    # create the all data object output subdir
+    all_data_output = os.path.join(output_subdir, "all_data_result_object")
+    os.makedirs(all_data_output, exist_ok=True)
+
+    logger.info(f"Serializing all data results to {all_data_output}")
+    all_data_results.serialize("result_obj", all_data_output)
+
+    # Extract the coefficients that are significant at the specified confidence level
+    all_data_sig_coefs = all_data_results.extract_significant_coefficients(
+        ci_level=args.all_data_ci_level,
+    )
+
+    logger.info(f"all_data_sig_coefs: {all_data_sig_coefs}")
+
+    if not all_data_sig_coefs:
+        logger.warning(
+            f"No significant coefficients found at {args.all_data_ci_level}% "
+            "confidence level. Exiting."
+        )
+        return
+
+    # write all_data_sig_coefs to a json file
+    all_data_ci_str = str(args.all_data_ci_level).replace(".", "-")
+    all_data_output_file = os.path.join(
+        output_subdir, f"all_data_significant_{all_data_ci_str}.json"
+    )
+    logger.info(f"Writing the all data significant results to {all_data_output_file}")
+    with open(
+        all_data_output_file,
+        "w",
+    ) as f:
+        json.dump(all_data_sig_coefs, f, indent=4)
+
+    logger.info(
+        "Step 3: Running LassoCV on topn data with significant coefficients "
+        "from the all data model"
+    )
+
+    # Create the formula for the topn modeling from the significant coefficients
+    # NOTE: to remove the intercept, we need to add " -1 "
+    topn_formula = f"{' + '.join(all_data_sig_coefs.keys())}"
+    logger.info(f"Topn formula: {topn_formula}")
+
+    # apply the top_n masking
+    input_data.top_n_masked = True
+
+    # Create the bootstrapped data for the topn modeling
+    bootstrapped_data_top_n = BootstrappedModelingInputData(
+        response_df=input_data.response_df,
+        model_df=input_data.get_modeling_data(
+            topn_formula, add_row_max=args.row_max, drop_intercept=True
         ),
+        n_bootstraps=topn_data_n_bootstraps,
+        bootstrap_indices=topn_data_bootstrap_indicies,
+    )
+
+    # If the bootstrap indicies are generated from the data, save them to a json file
+    # so that they can be reused in subsequent runs
+    if not topn_data_bootstrap_indicies:
+        topn_indicies_output_file = os.path.join(
+            output_subdir, "topn_bootstrap_indices.json"
+        )
+        logger.info(
+            "Saving the bootstrap indices for the topn data "
+            f"to {topn_indicies_output_file}"
+        )
+        bootstrapped_data_top_n.save_indices(topn_indicies_output_file)
+    else:
+        logger.info(
+            "Using the provided bootstrap indices for the topn data from "
+            f"{args.topn_data_bootstrap_indicies}"
+        )
+
+    logger.debug(
+        f"Running bootstrap LassoCV on topn data with {args.n_bootstraps} bootstraps"
+    )
+    topn_results = bootstrap_stratified_cv_modeling(
+        bootstrapped_data_top_n,
+        input_data.predictors_df[input_data.perturbed_tf],
+        estimator=estimator,
+        use_sample_weight_in_cv=args.use_weights_in_cv,
+        ci_percentiles=[float(args.topn_ci_level)],
+    )
+
+    # create the topn data object output subdir
+    topn_output = os.path.join(output_subdir, "topn_result_object")
+    os.makedirs(topn_output, exist_ok=True)
+
+    logger.info(f"Serializing topn results to {topn_output}")
+    topn_results.serialize("result_obj", topn_output)
+
+    # extract the topn_results at the specified confidence level
+    topn_output_res = topn_results.extract_significant_coefficients(
+        ci_level=args.topn_ci_level
+    )
+
+    logger.info(f"topn_output_res: {topn_output_res}")
+
+    if not topn_output_res:
+        logger.warning(
+            f"No significant coefficients found at {args.topn_ci_level}% "
+            "confidence level. Exiting."
+        )
+        return
+
+    # write topn_output_res to a json file
+    topn_ci_str = str(args.topn_ci_level).replace(".", "-")
+    topn_output_file = os.path.join(
+        output_subdir, f"topn_significant_{topn_ci_str}.json"
+    )
+    logger.info(f"Writing the topn significant results to {topn_output_file}")
+    with open(topn_output_file, "w") as f:
+        json.dump(topn_output_res, f, indent=4)
+
+    logger.info(
+        "Step 4: Test the significance of the interactor terms that survive "
+        "against the corresoponding main effect"
+    )
+
+    # unmask the data
+    input_data.top_n_masked = False
+
+    # calculate the statification classes for the perturbed TF (all data)
+    alldata_classes = stratification_classification(
+        input_data.predictors_df[input_data.perturbed_tf].squeeze(),
+        input_data.response_df.squeeze(),
+        bin_by_binding_only=args.bin_by_binding_only,
+        bins=args.bins,
+    )
+
+    # test the significance of the interactor against the main effect
+    results = evaluate_interactor_significance(
+        input_data,
+        stratification_classes=alldata_classes,
+        model_variables=list(
+            topn_results.extract_significant_coefficients(ci_level="90.0").keys()
+        ),
+    )
+
+    output_significance_file = os.path.join(
+        output_subdir, "interactor_vs_main_result.json"
+    )
+    logger.info(
+        "Writing the final interactor significance "
+        "results to {output_significance_file}"
+    )
+    results.serialize(output_significance_file)
+
+
+# def create_sqlite_db(args: argparse.Namespace):
+#     """
+#     Create an empty SQLite database file with WAL mode and busy timeout settings.
+
+#     :param db_path: Path to the SQLite database file to create.
+#     :param overwrite: Whether to overwrite the existing file if it exists.
+
+#     """
+#     # validate that the containing directory exists. If not create it
+#     if not os.path.exists(os.path.dirname(args.db_path)):
+#         os.makedirs(os.path.dirname(args.db_path), exist_ok=True)
+#         logger.info(
+#             f"Directory {os.path.dirname(args.db_path)} "
+#             "created for SQLite database."
+#         )
+
+#     if os.path.exists(args.db_path):
+#         if not args.overwrite:
+#             logger.info(
+#                 f"SQLite database already exists at {args.db_path}. "
+#                 "Skipping creation."
+#             )
+#             return
+#         else:
+#             os.remove(args.db_path)
+#             logger.info(f"Existing database at {args.db_path} removed.")
+
+#     conn = sqlite3.connect(args.db_path, timeout=60, isolation_level=None)
+#     conn.execute("PRAGMA journal_mode=WAL;")
+#     conn.execute("PRAGMA busy_timeout = 60000;")
+#     conn.close()
+#     logger.info(
+#         f"Created SQLite database at {args.db_path} with WAL mode and busy_timeout."
+#     )
+
+
+def create_database(
+    args: argparse.Namespace,
+    bootstrap_results_table_name: str = "bootstrap_results",
+    mse_table_name: str = "mse_path",
+):
+    """
+    Prepare a JSONL output directory and optionally clear an existing one.
+
+    If `overwrite` is True, the existing directory at `args.db_path` is deleted.
+
+    :param args: Argument namespace with 'db_path' and 'overwrite' attributes.
+    :param bootstrap_results_table_name: File name for bootstrap results.
+    :param mse_table_name: File name for MSE results.
+
+    """
+    if os.path.exists(args.db_path):
+        if args.overwrite:
+            shutil.rmtree(args.db_path)
+            logger.info(f"Existing directory at {args.db_path} removed.")
+        else:
+            logger.info(
+                f"Directory already exists at {args.db_path}. Skipping creation."
+            )
+
+    # Always recreate the directory if it was removed or didn't exist
+    os.makedirs(args.db_path, exist_ok=True)
+    logger.info(f"Directory {args.db_path} is ready for JSONL output.")
+
+    # Touch the .jsonl files
+    bootstrap_jsonl_path = os.path.join(
+        args.db_path, f"{bootstrap_results_table_name}.jsonl"
+    )
+    mse_jsonl_path = os.path.join(args.db_path, f"{mse_table_name}.jsonl")
+
+    for path in [bootstrap_jsonl_path, mse_jsonl_path]:
+        open(path, "a").close()  # touch: create if doesn't exist
+        logger.info(f"Initialized empty file: {path}")
+
+    logger.info(
+        f"JSONL files initialized:\n"
+        f"- {bootstrap_jsonl_path}\n"
+        f"- {mse_jsonl_path}"
+    )
+
+
+def insert_result(
+    i: int,
+    db_path: str,
+    result_row: dict,
+    max_retries: int = 50,
+    retry_wait: int = 5,
+):
+    """
+    Append a single result row to a JSONL (newline-delimited JSON) file using fcntl for
+    concurrency control.
+
+    :param i: Bootstrap index (used for jitter and logging).
+    :param db_path: Path to the output JSONL file.
+    :param result_row: Dictionary of results to write.
+    :param max_retries: Max retries if file is locked or busy.
+    :param retry_wait: Base wait time between retries.
+
+    """
+    rng = np.random.default_rng(seed=i)
+
+    for attempt in range(max_retries):
+        logger.info(
+            f"Attempting to write bootstrap {i} to {db_path} "
+            f"(attempt {attempt + 1}/{max_retries})"
+        )
+        try:
+            with open(db_path, "a") as f:
+                fcntl.flock(f, fcntl.LOCK_EX)
+                f.write(json.dumps(result_row) + "\n")
+                f.flush()
+                os.fsync(f.fileno())  # ensure it's written to disk
+                fcntl.flock(f, fcntl.LOCK_UN)
+
+            logger.info(f"Successfully wrote bootstrap {i} to {db_path}.")
+            return
+        except Exception as e:
+            logger.warning(f"[{i}] Write failed with error: {e}. Retrying...")
+            time.sleep(retry_wait + rng.uniform(0, 2))
+
+    logger.error(
+        f"Failed to write bootstrap {i} to {db_path} after {max_retries} retries."
+    )
+
+
+def sigmoid_bootstrap_worker(
+    args: argparse.Namespace,
+    bootstrap_results_table_name: str = "bootstrap_results",
+    mse_table_name: str = "mse_path",
+) -> None:
+
+    # create input data similar to perturbed_binding_modeling(). There needs to be a
+    # setting to decide whether to do "all data" or "top n" modeling
+
+    # Select bootstrap index
+    i = int(args.bootstrap_idx)
+
+    # Load input data
+    input_data = ModelingInputData.from_files(
+        response_path=args.response_file,
+        predictors_path=args.predictors_file,
+        perturbed_tf=args.perturbed_tf,
+        feature_blacklist_path=args.blacklist_file,
+        top_n=args.top_n,
+    )
+
+    # Determine formula
+    if input_data.top_n_masked:
+        raise NotImplementedError("Top n masking is not implemented for sigmoid model.")
+        # create formula from the significant coefficients calculated from the
+        # database
+        # results = BootstrapModelResults.from_db(
+        #     args.db_path, bootstrap_results_table_name
+        # )
+        # topn_sig_coefs = results.extract_significant_coefficients(
+        #     ci_level=args.ci_level
+        # )
+        # formula = " + ".join(topn_sig_coefs.keys())
+    else:
+        predictor_variables = input_data.predictors_df.columns.drop(args.perturbed_tf)
+        predictor_variables = [
+            var
+            for var in predictor_variables
+            if var not in args.exclude_interactor_variables
+        ]
+        interaction_terms = [
+            f"{args.perturbed_tf}:{var}" for var in predictor_variables
+        ]
+        formula = f"{args.perturbed_tf} + {' + '.join(interaction_terms)}"
+
+        if args.squared_pTF:
+            formula += f" + I({args.perturbed_tf} ** 2)"
+        if args.row_max:
+            formula += " + row_max"
+        if args.add_model_variables:
+            formula += " + " + " + ".join(args.add_model_variables)
+
+    logger.info(f"Model formula: {formula}")
+    model_df = input_data.get_modeling_data(
+        formula, add_row_max=args.row_max, drop_intercept=args.drop_intercept
+    )
+
+    bootstrap_indices = BootstrappedModelingInputData.load_indices(
+        args.bootstrap_indices_file
+    )
+    bootstrap_data = BootstrappedModelingInputData(
+        response_df=input_data.response_df,
+        model_df=model_df,
+        n_bootstraps=None,
+        bootstrap_indices=bootstrap_indices,
+    )
+
+    _, _, sample_weights = bootstrap_data.get_bootstrap_sample(i)
+
+    classes = stratification_classification(
+        input_data.predictors_df[input_data.perturbed_tf].squeeze(),
+        input_data.response_df.squeeze(),
+        bin_by_binding_only=args.bin_by_binding_only,
+        bins=args.bins,
+    )
+
+    skf = StratifiedKFold(n_splits=4, shuffle=True, random_state=i)
+
+    folds = list(skf.split(bootstrap_data.model_df, classes))
+
+    estimator = SigmoidModel(warm_start=args.warm_start, alphas=args.alphas, cv=folds)
+    logger.info("Fitting the model with bootstrap sample weights")
+    estimator.fit(
+        bootstrap_data.model_df,
+        bootstrap_data.response_df.values.ravel(),
+        sample_weight=sample_weights,
+    )
+
+    result_row = {
+        "bootstrap_idx": i,
+        "alpha": estimator.alpha_,
+        "final_training_score": estimator.score(
+            bootstrap_data.model_df, bootstrap_data.response_df.values.ravel()
+        ),
+        "left_asymptote": estimator.left_asymptote_,
+        "right_asymptote": estimator.right_asymptote_,
+        **dict(zip(bootstrap_data.model_df.columns, estimator.coef_)),
     }
 
-    # Save the results from bootstrapping for further analysis
-    # also perform the sequential processing where we take the
-    # results from "all" and call get_significant_predictors
-    # using only the TFs from these results on the top x% of data
-    # Sequential analysis
-    if args.method == "bootstrap_lassocv":
-        # Iterate through "all" and "top"
-        for suffix, lasso_results in lasso_res.items():
-            # Save ci_dict
-            ci_dict = lasso_results["bootstrap_lasso_output"][0]
-            ci_dict_path = os.path.join(output_dirpath, f"ci_dict_{suffix}.json")
-            with open(ci_dict_path, "w") as f:
-                json.dump(ci_dict, f, indent=4)
-
-            # Save bootstrap_coef_df
-            bootstrap_coef_df = pd.DataFrame(lasso_results["bootstrap_lasso_output"][1])
-            bootstrap_coef_df_path = os.path.join(
-                output_dirpath, f"bootstrap_coef_df_{suffix}.csv"
-            )
-            bootstrap_coef_df.to_csv(bootstrap_coef_df_path, index=False)
-        # Get significant predictors from "all" results
-        assert isinstance(lasso_res["all"]["sig_coefs"], dict)
-        significant_predictors_all = list(lasso_res["all"]["sig_coefs"].keys())
-
-        # Build the formula using these predictors
-        response_variable = f"{args.response_tf}_LRR"
-
-        # Ensure the main effect of the perturbed TF is included
-        formula_terms = significant_predictors_all.copy()
-
-        # Build the formula string
-        formula = f"{response_variable} ~ {' + '.join(formula_terms)}"
-
-        # Run get_significant_predictors with the custom formula
-        sequential_lasso_res = get_significant_predictors(
-            args.method,
-            args.response_tf,
-            response_df,
-            predictors_df,
-            ci_percentile=args.top_ci_percentile,
-            n_bootstraps=args.n_bootstraps,
-            add_max_lrb=False,
-            quantile_threshold=args.data_quantile,
-            formula=formula,  # Pass the formula via kwargs
-        )
-
-        # Rest of the code remains the same...
-        # Store the results under a new directory
-        sequential_output_dir = os.path.join(
-            output_dirpath, "sequential_top_genes_results"
-        )
-        os.makedirs(sequential_output_dir, exist_ok=True)
-
-        # Save ci_dict and bootstrap_coef_df from sequential_lasso_res
-        ci_dict_seq = sequential_lasso_res["bootstrap_lasso_output"][0]
-        ci_dict_seq_path = os.path.join(
-            sequential_output_dir, "ci_dict_sequential.json"
-        )
-        with open(ci_dict_seq_path, "w") as f:
-            json.dump(ci_dict_seq, f, indent=4)
-
-        bootstrap_coef_df_seq = pd.DataFrame(
-            sequential_lasso_res["bootstrap_lasso_output"][1]
-        )
-        bootstrap_coef_df_seq_path = os.path.join(
-            sequential_output_dir, "bootstrap_coef_df_sequential.csv"
-        )
-        bootstrap_coef_df_seq.to_csv(bootstrap_coef_df_seq_path, index=False)
-
-    # Ensure lasso_res["all"]["sig_coefs"] and
-    # lasso_res["top"]["sig_coefs"] are dictionaries
-    all_sig_coefs = lasso_res["all"]["sig_coefs"]
-    top_sig_coefs = lasso_res["top"]["sig_coefs"]
-
-    # intersect with type checking
-    if isinstance(all_sig_coefs, dict) and isinstance(top_sig_coefs, dict):
-        lasso_intersect_coefs = set(all_sig_coefs.keys()).intersection(
-            set(top_sig_coefs.keys())
-        )
-    else:
-        raise TypeError(
-            "Expected 'sig_coefs' to be dictionaries in 'all' and 'top', "
-            f"but got {type(all_sig_coefs)} and {type(top_sig_coefs)}."
-        )
-
-    # extract the predictors and ensure that they are dataframes
-    all_predictors = lasso_res["all"]["predictors"]
-    top_predictors = lasso_res["top"]["predictors"]
-    top_response = lasso_res["top"]["response"]
-
-    if not isinstance(all_predictors, pd.DataFrame) or not isinstance(
-        top_predictors, pd.DataFrame
-    ):
-        raise TypeError(
-            "Expected 'predictors' to be dataframes in 'all' and 'top', "
-            f"but got {type(all_predictors)} and {type(top_predictors)}."
-        )
-    if not isinstance(top_response, pd.DataFrame):
-        raise TypeError(
-            "Expected 'response' to be a dataframe in 'top', "
-            f"but got {type(top_response)}."
-        )
-
-    # Step 2: find the intersect coefficients between the all and top models. This is
-    # performed differently depending on args.method (see the tutorial)
-    if args.method == "lassocv_ols":
-
-        # Initialize the selector
-        selector_all = OLSFeatureSelector(p_value_threshold=args.all_pval_threshold)
-
-        # Transform the data to select only significant features
-        selector_all.refine_features(
-            all_predictors[list(lasso_intersect_coefs)],
-            lasso_res["all"]["response"],
-        )
-
-        selector_top10 = OLSFeatureSelector(p_value_threshold=args.top_pval_threshold)
-
-        _ = selector_top10.refine_features(
-            top_predictors.loc[top_response.index, list(lasso_intersect_coefs)],
-            top_response,
-        )
-
-        final_features = set(
-            selector_all.get_significant_features(drop_intercept=True)
-        ).intersection(selector_top10.get_significant_features(drop_intercept=True))
-
-    else:
-        final_features = lasso_intersect_coefs
-
-    # Save the intersection coefficients as a dictionary
-
-    intersection_path = os.path.join(output_dirpath, "intersection.json")
-    with open(intersection_path, "w") as f:
-        json.dump(list(lasso_intersect_coefs), f, indent=4)
-
-    # Step 3: determine if the interactor predictor is significant compared to its
-    # main effect
-    # get the additional main effects which will be tested from the final_features
-    main_effects = []
-    for term in final_features:
-        if ":" in term:
-            main_effects.append(term.split(":")[1])
-        else:
-            main_effects.append(term)
-
-    # combine these main effects with the final_features
-    interactor_terms_and_main_effects = list(final_features) + main_effects
-
-    # generate a model matrix with the intersect terms and the main effects. This full
-    # model will not be used for modeling -- subsets of the columns will be, however.
-    _, full_X = generate_modeling_data(
-        args.response_tf,
-        response_df,
-        predictors_df,
-        formula=f"~ {' + '.join(interactor_terms_and_main_effects)}",
-        drop_intercept=False,
+    insert_result(
+        i,
+        os.path.join(args.db_path, f"{bootstrap_results_table_name}.jsonl"),
+        result_row,
     )
 
-    # Add the max_lrb column, just in case it is present in the final_predictors.
-    # In this case, it is not.
-    model_tf = re.sub("_rep\\d+", "", args.response_tf)
-    max_lrb = predictors_df.drop(columns=model_tf).max(axis=1)
-    full_X["max_lrb"] = max_lrb
+    # Save MSE path if present
+    if hasattr(estimator, "mse_path_") and hasattr(estimator, "alphas_"):
+        n_alphas, n_folds = estimator.mse_path_.shape
+        for a_idx in range(n_alphas):
+            for f_idx in range(n_folds):
+                mse_row = {
+                    "bootstrap_idx": i,
+                    "alpha": estimator.alphas_[a_idx],
+                    "fold": f_idx,
+                    "mse": estimator.mse_path_[a_idx, f_idx],
+                }
+                insert_result(
+                    i, os.path.join(args.db_path, f"{mse_table_name}.jsonl"), mse_row
+                )
 
-    # Currently, this function tests each interactor term in the final_features
-    # with two variants by replacing the interaction term with the main effect only, and
-    # with the main effect + interactor. If either of the variants has a higher avg
-    # r-squared than the intersect_model, then that variant is returned. In this case,
-    # the original final_features are the best model.
-    full_avg_rsquared, interactor_results = get_interactor_importance(
-        lasso_res["all"]["response"],
-        full_X,
-        lasso_res["all"]["classes"],
-        final_features,
-    )
-
-    # use the interactor_results to update the final_features - we remove all
-    # interactors whose main effects improved r^2
-    for interactor_variant in interactor_results:
-        k = interactor_variant["interactor"]
-        final_features.remove(k)
-
-    # check if there are significant remaining features - proceed with last step if so
-    if final_features:
-        # Step 4: compare the results of the final model with a univariate model
-        avg_r2_univariate = stratified_cv_r2(
-            lasso_res["all"]["response"],
-            all_predictors[[model_tf]],
-            lasso_res["all"]["classes"],
-        )
-
-        final_model_avg_r_squared = stratified_cv_r2(
-            lasso_res["all"]["response"],
-            full_X[list(final_features)],
-            lasso_res["all"]["classes"],
-        )
-
-        output_dict = {
-            "response_tf": args.response_tf,
-            "final_features": list(final_features),
-            "avg_r2_univariate": avg_r2_univariate,
-            "final_model_avg_r_squared": final_model_avg_r_squared,
-        }
-
-        output_path = os.path.join(output_dirpath, "final_output.json")
-        with open(output_path, "w") as f:
-            json.dump(output_dict, f, indent=4)
-
-    # If bootstrap_lassocv is the chosen method, need to repeat steps 3 and 4 for the
-    # sequential results
-    if args.method == "bootstrap_lassocv":
-        # Step 3 and 4 for the sequential method
-
-        # Get the significant coefficients from the sequential results
-        sequential_sig_coefs = sequential_lasso_res["sig_coefs"]
-        assert isinstance(sequential_sig_coefs, dict)
-        sequential_final_features = set(sequential_sig_coefs.keys())
-
-        # Save the sequential significant coefficients as a dictionary
-        intersection_seq_path = os.path.join(
-            sequential_output_dir, "intersection_sequential.json"
-        )
-        with open(intersection_seq_path, "w") as f:
-            json.dump(list(sequential_final_features), f, indent=4)
-
-        # Get main effects
-        main_effects_seq = []
-        for term in sequential_final_features:
-            if ":" in term:
-                main_effects_seq.append(term.split(":")[1])
-            else:
-                main_effects_seq.append(term)
-
-        # Combine main effects with final features
-        interactor_terms_and_main_effects_seq = (
-            list(sequential_final_features) + main_effects_seq
-        )
-
-        # Generate model matrix
-        _, full_X_seq = generate_modeling_data(
-            args.response_tf,
-            response_df,
-            predictors_df,
-            formula=f"~ {' + '.join(interactor_terms_and_main_effects_seq)}",
-            drop_intercept=False,
-        )
-
-        # Add max_lrb column
-        full_X_seq["max_lrb"] = max_lrb
-
-        # Use the response and classes from the "all" data (NOT sequential data)
-        response_seq = lasso_res["all"]["response"]
-        classes_seq = lasso_res["all"]["classes"]
-
-        # Step 3: Get interactor importance using "all" data
-        (
-            full_avg_rsquared_seq,
-            interactor_results_seq,
-        ) = get_interactor_importance(
-            response_seq,
-            full_X_seq,
-            classes_seq,
-            sequential_final_features,
-        )
-
-        # Update final features based on interactor results - we remove all interactors
-        # whose main effects improved r^2
-        for interactor_variant in interactor_results_seq:
-            k = interactor_variant["interactor"]
-            sequential_final_features.remove(k)
-
-        # check if there are remaining features: proceed with last step if so
-        if sequential_final_features:
-            # Step 4: Compare results of final model vs. univariate model on "all" data
-            assert isinstance(lasso_res["all"]["predictors"], pd.DataFrame)
-            avg_r2_univariate_seq = stratified_cv_r2(
-                response_seq,
-                lasso_res["all"]["predictors"][[model_tf]],
-                classes_seq,
-            )
-
-            final_model_avg_r_squared_seq = stratified_cv_r2(
-                response_seq,
-                full_X_seq[list(sequential_final_features)],
-                classes_seq,
-            )
-
-            # Prepare output dictionary
-            output_dict_seq = {
-                "response_tf": args.response_tf,
-                "final_features": list(sequential_final_features),
-                "avg_r2_univariate": avg_r2_univariate_seq,
-                "final_model_avg_r_squared": final_model_avg_r_squared_seq,
-            }
-
-            # Save the output
-            output_path_seq = os.path.join(
-                sequential_output_dir, "final_output_sequential.json"
-            )
-            with open(output_path_seq, "w") as f:
-                json.dump(output_dict_seq, f, indent=4)
+    logger.info(f"Completed bootstrap {i}")
 
 
 class CustomHelpFormatter(argparse.HelpFormatter):
-    """Custom help formatter to format the subcommands and general options sections."""
+    """
+    This could be used to customize the help message formatting for the argparse parser.
 
-    # CustomHelpFormatter code remains the same as you provided
+    Left as a placeholder.
+
+    """
+
+
+def parse_bins(s):
+    try:
+        return [np.inf if x == "np.inf" else int(x) for x in s.split(",")]
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"Invalid bin value in '{s}'")
+
+
+def parse_comma_separated_list(value):
+    if not value:
+        return []
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def parse_json_dict(s):
+    try:
+        return json.loads(s)
+    except json.JSONDecodeError as e:
+        raise argparse.ArgumentTypeError(f"Invalid JSON: {e}")
+
+
+# Allowed keys for method='L-BFGS-B' (excluding deprecated options)
+LBFGSB_ALLOWED_KEYS = {
+    "maxcor",  # int
+    "ftol",  # float
+    "gtol",  # float
+    "eps",  # float or ndarray
+    "maxfun",  # int
+    "maxiter",  # int
+    "maxls",  # int
+    "finite_diff_rel_step",  # float or array-like or None
+}
+
+
+def parse_lbfgsb_options(s):
+    try:
+        opts = json.loads(s)
+        if not isinstance(opts, dict):
+            raise ValueError("Options must be a JSON object")
+
+        unexpected_keys = set(opts) - LBFGSB_ALLOWED_KEYS
+        if unexpected_keys:
+            raise argparse.ArgumentTypeError(
+                f"Unexpected keys in --minimize_options: {unexpected_keys}"
+            )
+        return opts
+    except json.JSONDecodeError as e:
+        raise argparse.ArgumentTypeError(f"Invalid JSON: {e}")
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e))
 
 
 def add_general_arguments_to_subparsers(subparsers, general_arguments):
@@ -618,174 +772,467 @@ def main() -> None:
 
     # Lasso Bootstrap command
     lasso_parser = subparsers.add_parser(
-        "lasso_bootstrap",
-        help="Run LassoCV with bootstrap resampling",
-        description="Run LassoCV with bootstrap resampling",
+        "perturbation_binding_modeling",
+        help="Run LassoCV or GeneralizedLogisticModel with bootstrap resampling",
+        description=(
+            "This executes the sequential workflow which models first  "
+            "`perturbation ~ binding` on all of the data, then extracts the "
+            "significant predictors and does the same thing on the `top n` data. "
+            "Finally it evaluates the surviving interactor terms against the "
+            "corresponding main effect."
+        ),
         formatter_class=CustomHelpFormatter,
     )
 
     # Input arguments
     input_group = lasso_parser.add_argument_group("Input")
+    # Input arguments
     input_group.add_argument(
         "--response_file",
         type=str,
         required=True,
-        help="Path to the response CSV file. NOTE: the index column must be "
-        "present and the first column in the CSV. Additionally, the index values "
-        "should be either symbols or locus tags, matching the index values in both "
-        "response and predictors files. The perturbed gene will be removed from "
-        "the model data only if column names in response data match the index "
-        "format (e.g., symbol or locus tag).",
+        help=(
+            "Path to the response CSV file. The first column must contain "
+            "feature names or locus tags (e.g., gene symbols), matching the index "
+            "format in both response and predictor files. The perturbed gene will "
+            "be removed from the model data only if its column names match the "
+            "index format."
+        ),
     )
+
     input_group.add_argument(
         "--predictors_file",
         type=str,
         required=True,
-        help="Path to the predictors CSV file. NOTE: the index column must be "
-        "present and the first column in the CSV. Additionally, the index values "
-        "should be either symbols or locus tags, matching the index values in both "
-        "response and predictors files. The perturbed gene will be removed from the "
-        "model data only if column names in predictors data match the index "
-        "format (e.g., symbol or locus tag).",
+        help=(
+            "Path to the predictors CSV file. The first column must contain "
+            "feature names or locus tags (e.g., gene symbols), ensuring consistency "
+            "between response and predictor files. The perturbed gene will be "
+            "removed from the model if predictor column names match the index format."
+        ),
     )
+
     input_group.add_argument(
         "--perturbed_tf",
         type=str,
-        help="A response variable column to use. The data indices should be in "
-        "the same format (e.g., symbol or locus tag) so that the perturbed gene can "
-        "be removed from the data prior to modeling.",
+        required=True,
+        help=(
+            "Name of the perturbed transcription factor (TF) used as the "
+            "response variable. It must match a column in the response file. The "
+            "format should be consistent with the feature index (e.g., gene symbol "
+            "or locus tag)."
+        ),
     )
+
     input_group.add_argument(
-        "--formula",
+        "--blacklist_file",
+        type=str,
+        default="",
+        help=(
+            "Optional file containing a list of features (one per line) to be excluded "
+            "from the analysis. If omitted, no features will be blacklisted."
+        ),
+    )
+
+    input_group.add_argument(
+        "--all_data_bootstrap_indicies",
         type=str,
         default=None,
-        help="The formula to use for modeling. If omitted, a formula with all of "
-        "the interactors will be used, eg "
-        "perturbed_tf_lrr ~ perturbed_tf + perturbed_tf:other_tf1 + ...",
+        help=(
+            "Path to a JSON file containing the bootstrap indices for the all data "
+            "model. If provided, these indices will be used instead of generating "
+            "new ones. If not provided, new bootstrap indices will be generated "
+            "and saved."
+        ),
     )
+
     input_group.add_argument(
-        "--data_quantile",
-        type=float,
+        "--topn_data_bootstrap_indicies",
+        type=str,
         default=None,
-        help="The quantile threshold for filtering the data based on the "
-        "perturbed binding data. For example, 0.1 would select the top 10 percent. "
-        "If omitted, all data will be used.",
+        help=(
+            "Path to a JSON file containing the bootstrap indices for the topn data "
+            "model. If provided, these indices will be used instead of generating "
+            "new ones. If not provided, new bootstrap indices will be generated "
+            "and saved."
+        ),
     )
-    input_group.add_argument(
+
+    parameters_group = lasso_parser.add_argument_group("Parameters")
+
+    parameters_group.add_argument(
+        "--top_n",
+        type=int,
+        default=600,
+        help=(
+            "Number of features to retain in the second round of modeling. "
+            "Default is 600"
+        ),
+    )
+
+    parameters_group.add_argument(
         "--n_bootstraps",
         type=int,
         default=1000,
-        help="Number of bootstrap samples to generate.",
+        help="Number of bootstrap samples to generate for resampling. Default is 1000",
+    )
+
+    parameters_group.add_argument(
+        "--all_data_ci_level",
+        type=float,
+        default=98.0,
+        help=(
+            "Confidence interval threshold (in percent) for selecting significant "
+            "coefficients. Default is 98.0"
+        ),
+    )
+
+    parameters_group.add_argument(
+        "--topn_ci_level",
+        type=float,
+        default=90.0,
+        help=(
+            "Confidence interval threshold for the second round of modeling. "
+            "Default is 90.0"
+        ),
+    )
+
+    parameters_group.add_argument(
+        "--max_iter",
+        type=int,
+        default=10000,
+        help=(
+            "This controls the maximum number of iterations LassoCV may "
+            "use in order to fit"
+        ),
+    )
+
+    parameters_group.add_argument(
+        "--use_weights_in_cv",
+        action="store_true",
+        help=(
+            "Enable sample weighting in cross-validation based on bootstrap "
+            "sample proportions."
+        ),
+    )
+
+    parameters_group.add_argument(
+        "--row_max",
+        action="store_true",
+        help=(
+            "Include the row max as an additional predictor in the model matrix "
+            "in the first round (all data) model."
+        ),
+    )
+
+    parameters_group.add_argument(
+        "--squared_pTF",
+        action="store_true",
+        help=(
+            "Include the squared pTF as an additional predictor in the model matrix "
+            "in the first round (all data) model."
+        ),
+    )
+
+    parameters_group.add_argument(
+        "--bin_by_binding_only",
+        action="store_true",
+        help=(
+            "When creating stratification classes, use binding data only instead of "
+            "both binding and perturbation data. The default is to use both."
+        ),
+    )
+
+    parameters_group.add_argument(
+        "--bins",
+        type=parse_bins,
+        default="0,8,64,512,np.inf",
+        help=(
+            "Comma-separated list of bin edges (integers or 'np.inf'). "
+            "Default is --bins 0,8,12,np.inf"
+        ),
+    )
+
+    parameters_group.add_argument(
+        "--exclude_interactor_variables",
+        type=parse_comma_separated_list,
+        default=[],
+        help=(
+            "Comma-separated list of variables to exclude from the interactor terms. "
+            "E.g. red_median,green_median"
+        ),
+    )
+
+    parameters_group.add_argument(
+        "--add_model_variables",
+        type=parse_comma_separated_list,
+        default=[],
+        help=(
+            "Comma-separated list of variables to add to the all_data model. "
+            "E.g., red_median,green_median would be added as ... + red_median + "
+            "green_median"
+        ),
     )
 
     # Output arguments
     output_group = lasso_parser.add_argument_group("Output")
+
     output_group.add_argument(
         "--output_dir",
         type=str,
-        default="./lasso_bootstrap_output",
-        help="Path to the output directory where results will be saved.",
+        default="./perturbation_binding_modeling_results",
+        help=(
+            "Directory where model results will be saved. A new subdirectory "
+            "is created per run."
+        ),
     )
 
-    lasso_parser.set_defaults(func=run_lasso_bootstrap)
+    output_group.add_argument(
+        "--output_suffix",
+        type=str,
+        default="",
+        help=(
+            "The subdirectory will be named by the perturbed_tf. "
+            "Use output_suffix to add a suffix to the subdirectory name."
+        ),
+    )
 
-    # Find Interactors Workflow command
-    find_interactors_parser = subparsers.add_parser(
-        "find_interactors_workflow",
-        help="Run the find interactors workflow",
-        description="Run the find interactors workflow",
+    system_group = lasso_parser.add_argument_group("System")
+
+    system_group.add_argument(
+        "--n_cpus",
+        type=int,
+        default=4,
+        help=(
+            "Number of CPUs to use for parallel processing each lassoCV call. "
+            "Recommended 4"
+        ),
+    )
+
+    lasso_parser.set_defaults(func=perturbation_binding_modeling)
+
+    # Sigmoid worker cmds
+    sigmoid_parser = subparsers.add_parser(
+        "sigmoid_bootstrap_worker",
+        help="Run a single bootstrap iteration of the sigmoid model",
+        description=(
+            "This executes a single bootstrap iteration of the sigmoid model."
+        ),
         formatter_class=CustomHelpFormatter,
     )
 
-    # Input arguments
-    input_group = find_interactors_parser.add_argument_group("Input")
-    input_group.add_argument(
+    sigmoid_input_group = sigmoid_parser.add_argument_group("Input")
+
+    sigmoid_input_group.add_argument(
         "--response_file",
         type=str,
         required=True,
-        help="Path to the response CSV file. NOTE: the index column must be "
-        "present and the first column in the CSV. Additionally, the index values "
-        "should be either symbols or locus tags, matching the index values in both "
-        "response and predictors files. The perturbed gene will be removed from "
-        "the model data only if column names in response data match the index "
-        "format (e.g., symbol or locus tag).",
+        help=(
+            "Path to the response CSV file. The first column must contain "
+            "feature names or locus tags (e.g., gene symbols), matching the index "
+            "format in both response and predictor files. The perturbed gene will "
+            "be removed from the model data only if its column names match the "
+            "index format."
+        ),
     )
-    input_group.add_argument(
+
+    sigmoid_input_group.add_argument(
         "--predictors_file",
         type=str,
         required=True,
-        help="Path to the predictors CSV file. NOTE: the index column must be "
-        "present and the first column in the CSV. Additionally, the index values "
-        "should be either symbols or locus tags, matching the index values in both "
-        "response and predictors files. The perturbed gene will be removed from the "
-        "model data only if column names in predictors data match the index "
-        "format (e.g., symbol or locus tag).",
+        help=(
+            "Path to the predictors CSV file. The first column must contain "
+            "feature names or locus tags (e.g., gene symbols), ensuring consistency "
+            "between response and predictor files. The perturbed gene will be "
+            "removed from the model if predictor column names match the index format."
+        ),
     )
-    input_group.add_argument(
-        "--response_tf",
+    sigmoid_input_group.add_argument(
+        "--perturbed_tf",
         type=str,
         required=True,
-        help="The response TF to use for the modeling.",
+        help=(
+            "Name of the perturbed transcription factor (TF) used as the "
+            "response variable. It must match a column in the response file. The "
+            "format should be consistent with the feature index (e.g., gene symbol "
+            "or locus tag)."
+        ),
     )
-    input_group.add_argument(
-        "--method",
+    sigmoid_input_group.add_argument(
+        "--blacklist_file",
+        type=str,
+        default="",
+        help=(
+            "Optional file containing a list of features (one per line) to be excluded "
+            "from the analysis. If omitted, no features will be blacklisted."
+        ),
+    )
+    sigmoid_input_group.add_argument(
+        "--bootstrap_indices_file",
         type=str,
         required=True,
-        choices=["bootstrap_lassocv", "lassocv_ols"],
-        help="The method to use for modeling.",
+        help=(
+            "Path to a JSON file containing the bootstrap indices for the model. "
+            "These indices will be used for resampling."
+        ),
     )
-    input_group.add_argument(
-        "--all_ci_percentile",
-        type=float,
-        default=99.8,
-        help="The percentile to use for the all model CI. This will only be used "
-        "if the method is `bootstrap_lassocv`.",
-    )
-    input_group.add_argument(
-        "--top_ci_percentile",
-        type=float,
-        default=90.0,
-        help="The percentile to use for the top model CI. This will only be used "
-        "if the method is `bootstrap_lassocv`.",
-    )
-    input_group.add_argument(
-        "--all_pval_threshold",
-        type=float,
-        default=0.001,
-        help="The p-value threshold to use for the all model. This will only be used "
-        "if the method is `lassocv_ols`.",
-    )
-    input_group.add_argument(
-        "--top_pval_threshold",
-        type=float,
-        default=0.01,
-        help="The p-value threshold to use for the top model. This will only be used "
-        "if the method is `lassocv_ols`.",
-    )
-    input_group.add_argument(
-        "--data_quantile",
-        type=float,
-        default=0.1,
-        help="The quantile threshold to use for the `top` data. See the tutorial for "
-        "more information.",
-    )
-    input_group.add_argument(
-        "--n_bootstraps",
+
+    sigmoid_input_group.add_argument(
+        "--bootstrap_idx",
         type=int,
-        default=1000,
-        help="Number of bootstrap samples to generate.",
+        required=True,
+        help=(
+            "Bootstrap index to use for the current iteration. This should be "
+            "an integer corresponding to the bootstrap sample."
+        ),
     )
 
-    # output arguments
-    output_group = find_interactors_parser.add_argument_group("Output")
-    output_group.add_argument(
-        "--output_dir",
+    sigmoid_parameters_group = sigmoid_parser.add_argument_group("Parameters")
+
+    sigmoid_parameters_group.add_argument(
+        "--top_n",
+        type=int,
+        default=None,
+        help=(
+            "This is the number of features to use for second round modeling. "
+            "Defaults to `Non`, for the 'all_data' model. Set to eg 600 for top_n "
+            "modeling"
+        ),
+    )
+    sigmoid_parameters_group.add_argument(
+        "--ci_level",
+        type=float,
+        default=98.0,
+        help=(
+            "Confidence interval threshold for the second round of modeling. "
+            "Default is 98.0. Only applied if `--top_n` is set"
+        ),
+    )
+    sigmoid_parameters_group.add_argument(
+        "--drop_intercept",
+        action="store_true",
+        help=("Drop the intercept from the model. Default is False"),
+    )
+    sigmoid_parameters_group.add_argument(
+        "--warm_start",
+        action="store_true",
+        help=("Enable warm start for the model. Default is False"),
+    )
+    sigmoid_parameters_group.add_argument(
+        "--alphas",
+        type=float,
+        nargs="+",
+        default=[0.1, 1.0, 10.0],
+        help=(
+            "List of alpha values to use for the model. " "Default is [0.1, 1.0, 10.0]"
+        ),
+    )
+    sigmoid_parameters_group.add_argument(
+        "--bin_by_binding_only",
+        action="store_true",
+        help=(
+            "When creating stratification classes, use binding data only instead of "
+            "both binding and perturbation data. The default is to use both."
+        ),
+    )
+
+    sigmoid_parameters_group.add_argument(
+        "--bins",
+        type=parse_bins,
+        default="0,8,64,512,np.inf",
+        help=(
+            "Comma-separated list of bin edges (integers or 'np.inf'). "
+            "Default is --bins 0,8,12,np.inf"
+        ),
+    )
+
+    sigmoid_parameters_group.add_argument(
+        "--row_max",
+        action="store_true",
+        help=(
+            "Include the row max as an additional predictor in the model matrix "
+            "in the first round (all data) model."
+        ),
+    )
+
+    sigmoid_parameters_group.add_argument(
+        "--squared_pTF",
+        action="store_true",
+        help=(
+            "Include the squared pTF as an additional predictor in the model matrix "
+            "in the first round (all data) model."
+        ),
+    )
+
+    sigmoid_parameters_group.add_argument(
+        "--exclude_interactor_variables",
+        type=parse_comma_separated_list,
+        default=[],
+        help=(
+            "Comma-separated list of variables to exclude from the interactor terms. "
+            "E.g. red_median,green_median"
+        ),
+    )
+
+    sigmoid_parameters_group.add_argument(
+        "--add_model_variables",
+        type=parse_comma_separated_list,
+        default=[],
+        help=(
+            "Comma-separated list of variables to add to the all_data model. "
+            "E.g., red_median,green_median would be added as ... + red_median + "
+            "green_median"
+        ),
+    )
+    sigmoid_parameters_group.add_argument(
+        "--minimize_options",
+        type=parse_lbfgsb_options,
+        help=(
+            "JSON string of options for scipy.optimize.minimize with "
+            "method='L-BFGS-B'. Allowed keys (with defaults): "
+            "maxcor=10, ftol=2.22e-9, gtol=1e-5, eps=1e-8, maxfun=15000, "
+            "maxiter=15000, maxls=20, finite_diff_rel_step=None. "
+            'Example: \'{"maxiter": 1000, "gtol": 1e-6}\''
+        ),
+    )
+
+    sigmoid_output_group = sigmoid_parser.add_argument_group("Output")
+
+    sigmoid_output_group.add_argument(
+        "--db_path",
         type=str,
-        default="./find_interactors_output",
-        help="Path to the output directory where results will be saved.",
+        required=True,
+        help=("Path to the database file where the results will be stored."),
     )
 
-    find_interactors_parser.set_defaults(func=find_interactors_workflow)
+    sigmoid_parser.set_defaults(func=sigmoid_bootstrap_worker)
+
+    # add create_database command
+    create_db_parser = subparsers.add_parser(
+        "create_database",
+        help="Create an database file (sqlite or csv)",
+        description=(
+            "Create an empty database file with WAL mode and busy timeout " "settings."
+        ),
+        formatter_class=CustomHelpFormatter,
+    )
+
+    create_db_parser.add_argument(
+        "--db_path",
+        type=str,
+        required=True,
+        help="Path to the database file to create.",
+    )
+
+    create_db_parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help=(
+            "Overwrite the existing database file if it exists. " "Default is False."
+        ),
+    )
+
+    create_db_parser.set_defaults(func=create_database)
 
     # Add the general arguments to the subcommand parsers
     add_general_arguments_to_subparsers(subparsers, [log_level_argument])

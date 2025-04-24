@@ -5,6 +5,7 @@
         "arange",
         "astype",
         "dtype",
+        "interactor",
         "issubdtype",
         "ndarray",
         "ndim",
@@ -13,6 +14,7 @@
         "pvalues",
         "randperm",
         "rankdata",
+        "topn",
         "yeastdnnexplorer"
     ],
     "[markdown]": {

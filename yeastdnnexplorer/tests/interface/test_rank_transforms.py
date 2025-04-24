@@ -2,8 +2,8 @@ import numpy as np
 from scipy.stats import rankdata
 
 from yeastdnnexplorer.interface.rank_transforms import (
-    negative_log_transform_by_pvalue_and_enrichment,
     shifted_negative_log_ranks,
+    transform,
 )
 
 
@@ -33,9 +33,7 @@ def test_negative_log_transform_basic():
         np.max(expected_ranks)
     )
 
-    actual_log_ranks = negative_log_transform_by_pvalue_and_enrichment(
-        pvalues, enrichment
-    )
+    actual_log_ranks = transform(pvalues, enrichment)
     np.testing.assert_array_almost_equal(actual_log_ranks, expected_log_ranks)
 
 
@@ -50,9 +48,7 @@ def test_all_ties_in_primary_column():
         np.max(expected_secondary_ranks)
     )
 
-    actual_log_ranks = negative_log_transform_by_pvalue_and_enrichment(
-        pvalues, enrichment
-    )
+    actual_log_ranks = transform(pvalues, enrichment)
     np.testing.assert_array_almost_equal(actual_log_ranks, expected_log_ranks)
 
 
@@ -66,9 +62,7 @@ def test_no_ties_in_primary_column():
         np.max(expected_ranks)
     )
 
-    actual_log_ranks = negative_log_transform_by_pvalue_and_enrichment(
-        pvalues, enrichment
-    )
+    actual_log_ranks = transform(pvalues, enrichment)
     np.testing.assert_array_almost_equal(actual_log_ranks, expected_log_ranks)
 
 
@@ -82,7 +76,5 @@ def test_tied_in_both_pvalue_and_enrichment():
         np.max(expected_ranks)
     )
 
-    actual_log_ranks = negative_log_transform_by_pvalue_and_enrichment(
-        pvalues, enrichment
-    )
+    actual_log_ranks = transform(pvalues, enrichment)
     np.testing.assert_array_almost_equal(actual_log_ranks, expected_log_ranks)

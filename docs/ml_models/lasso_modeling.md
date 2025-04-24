@@ -1,12 +1,16 @@
 <h1>Lasso Modeling</h1> 
 
-<h2>generate_modeling_data</h2>
+<h2>ModelingInputData</h2>
 
-::: yeastdnnexplorer.ml_models.lasso_modeling.generate_modeling_data
+::: yeastdnnexplorer.ml_models.lasso_modeling.ModelingInputData
 
-<h2>stratification_classification</h2>
+<h2>BootstrappedModelingInputData</h2>
 
-::: yeastdnnexplorer.ml_models.lasso_modeling.stratification_classification
+::: yeastdnnexplorer.ml_models.lasso_modeling.BootstrappedModelingInputData
+
+<h2>BootstrapModelResults</h2>
+
+::: yeastdnnexplorer.ml_models.lasso_modeling.BootstrapModelResults
 
 <h2>stratified_cv_modeling</h2>
 
@@ -16,26 +20,10 @@
 
 ::: yeastdnnexplorer.ml_models.lasso_modeling.bootstrap_stratified_cv_modeling
 
-<h2>examine_bootstrap_coefficients</h2>
+<h2>evaluate_interactor_significance</h2>
 
-::: yeastdnnexplorer.ml_models.lasso_modeling.examine_bootstrap_coefficients
+::: yeastdnnexplorer.ml_models.lasso_modeling.evaluate_interactor_significance
 
-<h2>get_significant_predictors</h2>
+<h2>InteractorSignificanceResults</h2>
 
-::: yeastdnnexplorer.ml_models.lasso_modeling.get_significant_predictors
-
-<h2>stratified_cv_r2</h2>
-
-::: yeastdnnexplorer.ml_models.lasso_modeling.stratified_cv_r2
-
-<h2>try_interactor_variants</h2>
-
-::: yeastdnnexplorer.ml_models.lasso_modeling.try_interactor_variants
-
-<h2>get_interactor_importance</h2>
-
-::: yeastdnnexplorer.ml_models.lasso_modeling.get_interactor_importance
-
-<h2>OLSFeatureSelector</h2>
-
-::: yeastdnnexplorer.ml_models.lasso_modeling.OLSFeatureSelector
+::: yeastdnnexplorer.ml_models.lasso_modeling.InteractorSignificanceResults

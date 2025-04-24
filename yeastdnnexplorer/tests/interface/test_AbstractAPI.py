@@ -65,12 +65,13 @@ def test_pop_params(snapshot, api_client):
     snapshot.assert_match(params_as_json2, "pop_params_after_all_removed")
 
 
-def test_is_valid_url(snapshot, api_client):
+@responses.activate
+def test_is_valid_url(api_client):
     invalid_url = "https://invalid.url"
 
     responses.add(responses.HEAD, invalid_url, status=404)
 
-    with pytest.raises(AttributeError):
+    with pytest.raises(ValueError):
         api_client.url = invalid_url
 
 

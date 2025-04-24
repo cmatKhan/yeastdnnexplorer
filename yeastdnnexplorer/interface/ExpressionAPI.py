@@ -31,6 +31,7 @@ class ExpressionAPI(AbstractRecordsAndFilesAPI):
                 "mechanism",
                 "restriction",
                 "time",
+                "strain",
                 "source",
                 "source_name",
                 "source_time",

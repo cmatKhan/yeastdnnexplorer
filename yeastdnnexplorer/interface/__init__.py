@@ -11,11 +11,7 @@ from .GenomicFeatureAPI import GenomicFeatureAPI
 from .metric_arrays import metric_arrays
 from .PromoterSetAPI import PromoterSetAPI
 from .PromoterSetSigAPI import PromoterSetSigAPI
-from .rank_transforms import (
-    negative_log_transform_by_pvalue_and_enrichment,
-    shifted_negative_log_ranks,
-    stable_rank,
-)
+from .rank_transforms import shifted_negative_log_ranks, stable_rank, transform
 from .RankResponseAPI import RankResponseAPI
 from .RegulatorAPI import RegulatorAPI
 
@@ -31,7 +27,7 @@ __all__ = [
     "FileFormatAPI",
     "GenomicFeatureAPI",
     "metric_arrays",
-    "negative_log_transform_by_pvalue_and_enrichment",
+    "transform",
     "PromoterSetAPI",
     "PromoterSetSigAPI",
     "RankResponseAPI",

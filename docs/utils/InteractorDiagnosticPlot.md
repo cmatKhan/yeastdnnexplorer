@@ -1,1 +1,0 @@
-::: yeastdnnexplorer.utils.InteractorDiagnosticPlot

@@ -67,6 +67,7 @@ pytest-playwright = "^0.5.1"
 playwright = "^1.46.0"
 ipywidgets = "^8.1.5"
 mkdocs-jupyter = "^0.25.0"
+pymdown-extensions = "^10.14.3"
 
 [tool.pytest.ini_options]
 minversion = "6.0"
@@ -75,6 +76,7 @@ python_files = [
     "test_*.py",
 ]
 pythonpath = ['.']
+addopts = "--ignore=tmp"
 
 [tool.coverage.run]
 include = ["yeastdnnexplorer/**"]
