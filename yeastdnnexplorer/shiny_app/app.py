@@ -1,10 +1,14 @@
 # import asyncio
-# import logging
+import logging
+
 # from typing import Literal
+from pathlib import Path
 
 import pandas as pd
-from shiny import App, reactive, run_app, ui
+from shiny import App, reactive, render, run_app, ui
 from shiny.types import SilentException
+
+logger = logging.getLogger("shiny")
 
 # from yeastdnnexplorer.interface import (
 #     DtoAPI,
@@ -282,24 +286,65 @@ from shiny.types import SilentException
 #         rr_meta_subset("univariatemodels"),
 #     )
 
-app_ui = ui.page_sidebar(
-    sidebar=ui.sidebar(
-        ui.input_text("text", "Text input"),
-        ui.input_action_button("btn", "Click me"),
+app_ui = ui.page_fillable(
+    ui.panel_title("Yeast Regulatory DB", window_title="Yeast Regulatory DB"),
+    ui.include_css((Path(__file__).parent / "style.css").resolve()),
+    ui.navset_card_pill(
+        ui.nav_panel(
+            "Binding",
+            ui.layout_columns(
+                ui.row(ui.card("test1_binding"), ui.card("test2_binding")),
+                ui.row(ui.card("test3_binding"), ui.card("test4_binding")),
+            ),
+            value="binding_tab",
+        ),
+        ui.nav_panel(
+            "Perturbation Response",
+            ui.layout_columns(
+                ui.row(ui.card("test1"), ui.card("test2")),
+                ui.row(ui.card("test3"), ui.card("test4")),
+            ),
+            value="perturbation_response_tab",
+        ),
+        ui.nav_panel(
+            "Compare",
+            ui.card(
+                ui.layout_sidebar(
+                    ui.sidebar(
+                        ui.input_select(
+                            "binding",
+                            label="binding",
+                            choices=["callingcards", "chipexo"],
+                        ),
+                        ui.input_select(
+                            "perturbation",
+                            label="perturbation",
+                            choices=["mcisaac", "kemmeren"],
+                        ),
+                        ui.input_select("TF", label="TF", choices=["TF1", "TF2"]),
+                    )
+                ),
+            ),
+            value="compare_tab",
+        ),
+        id="tab",
     ),
 )
 
+import time
+
 
 def app_server(input, output, session):
-    @reactive.effect
-    def _():
-        if input.text() == "hello":
-            raise SilentException("Silent exception raised")
+    initial_run = reactive.Value(True)
 
-    @reactive.event(input.btn)
+    # this provides a location to execute on_start operations
+    @reactive.Effect
     def _():
-        print("Button clicked")
-        raise SilentException("Silent exception raised")
+        with reactive.isolate():
+            if initial_run.get():
+                logger.info("Executing on_start logic")
+                time.sleep(2)  # Simulate some work
+                initial_run.set(False)
 
 
 # Create an app instance
