@@ -504,6 +504,7 @@ class BootstrappedModelingInputData:
         model_df: pd.DataFrame,
         n_bootstraps: int | None = None,
         bootstrap_indices: list[np.ndarray] | None = None,
+        normalize_sample_weights: bool = True,
     ) -> None:
         """
         Initialize bootstrapped modeling input.
@@ -532,6 +533,7 @@ class BootstrappedModelingInputData:
 
         self.response_df: pd.DataFrame = response_df
         self.model_df: pd.DataFrame = model_df
+        self.normalize_sample_weights = normalize_sample_weights
 
         # If bootstrap_indices is provided, set n_bootstraps based on its length
         if bootstrap_indices is not None:
@@ -593,6 +595,30 @@ class BootstrappedModelingInputData:
         self._compute_sample_weights()
 
     @property
+    def normalize_sample_weights(self) -> bool:
+        """
+        Get the normalization status for sample weights.
+
+        :return: True if sample weights are normalized, False otherwise.
+
+        """
+        return self._normalize_sample_weights
+
+    @normalize_sample_weights.setter
+    def normalize_sample_weights(self, value: bool) -> None:
+        """
+        Set the normalization status for sample weights.
+
+        :param value: Boolean indicating whether to normalize sample weights.
+        :raises ValueError: If the input is not a boolean.
+
+        """
+        if not isinstance(value, bool):
+            raise ValueError("normalize_sample_weights must be a boolean.")
+        logger.info(f"Sample weights normalization set to: {value}")
+        self._normalize_sample_weights = value
+
+    @property
     def sample_weights(self) -> dict[int, np.ndarray]:
         """
         Normalized sample weights corresponding to bootstrap samples.
@@ -626,7 +652,7 @@ class BootstrappedModelingInputData:
         ]
         self._compute_sample_weights()
 
-    def _compute_sample_weights(self, normalize: bool = True) -> None:
+    def _compute_sample_weights(self) -> None:
         """
         Computes sample weights from existing bootstrap indices.
 
@@ -638,14 +664,16 @@ class BootstrappedModelingInputData:
         y_indices: np.ndarray = self.response_df.index.to_numpy()
         sample_weights: dict[int, np.ndarray] = {}
 
-        logger.info(f"Sample weights normalization: {normalize}")
+        logger.info(
+            f"Sample weights normalization method: {self.normalize_sample_weights}"
+        )
 
         for i, sample in enumerate(self._bootstrap_indices):
             index_mapping = {label: idx for idx, label in enumerate(y_indices)}
             integer_indices = np.array([index_mapping[label] for label in sample])
             sample_counts = np.bincount(integer_indices, minlength=len(y_indices))
 
-            if normalize:
+            if self.normalize_sample_weights:
                 # note sample_counts.sum() == len(y_indicies) in this case, but
                 # sample_counts.sum() seems to be more canonical
                 sample_weights[i] = sample_counts / sample_counts.sum()

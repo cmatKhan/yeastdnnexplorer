@@ -591,6 +591,7 @@ def sigmoid_bootstrap_worker(
         model_df=model_df,
         n_bootstraps=None,
         bootstrap_indices=bootstrap_indices,
+        normalize_sample_weights=args.normalize_sample_weights,
     )
 
     _, _, sample_weights = bootstrap_data.get_bootstrap_sample(i)
@@ -1194,6 +1195,14 @@ def main() -> None:
             "maxcor=10, ftol=2.22e-9, gtol=1e-5, eps=1e-8, maxfun=15000, "
             "maxiter=15000, maxls=20, finite_diff_rel_step=None. "
             'Example: \'{"maxiter": 1000, "gtol": 1e-6}\''
+        ),
+    )
+
+    sigmoid_parameters_group.add_argument(
+        "--normalize_sample_weights",
+        action="store_true",
+        help=(
+            "Set this to normalize the sample weights to sum to 1. " "Default is False."
         ),
     )
 
