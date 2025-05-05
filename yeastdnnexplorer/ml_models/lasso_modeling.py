@@ -2,7 +2,6 @@ import json
 import logging
 import os
 import pickle
-import sqlite3
 import warnings
 from typing import Any
 
@@ -867,6 +866,7 @@ class BootstrapModelResults:
         ci_dict: dict[str, dict[str, tuple[float, float]]],
         bootstrap_coefs_df: pd.DataFrame,
         alpha_list: list[float],
+        alpha_df: pd.DataFrame = pd.DataFrame(),
     ):
         """
         Initialize BootstrapModelResults.
@@ -877,11 +877,14 @@ class BootstrapModelResults:
             containing coefficient values from each bootstrap sample.
         :param alpha_list: List of alpha values (regularization strength) selected
             during each bootstrap iteration.
+        :param alpha_df: a dataframe with the columns 'bootstrap_idx', 'alpha', 'fold',
+            and 'mse'
 
         """
         self.ci_dict = ci_dict
         self.bootstrap_coefs_df = bootstrap_coefs_df
         self.alpha_list = alpha_list
+        self.alpha_df = alpha_df
 
     def extract_significant_coefficients(
         self, ci_level: str = "95.0", threshold: float = 0.0
@@ -1040,40 +1043,66 @@ class BootstrapModelResults:
         return cls(ci_dict, bootstrap_coefs_df, alpha_list)
 
     @classmethod
-    def from_db(cls, sqlite_path: str, table_name: str) -> "BootstrapModelResults":
+    def from_jsonl(
+        cls,
+        db_path: str,
+        bootstrap_results_table_name: str = "bootstrap_results",
+        mse_table_name: str = "mse_path",
+    ) -> "BootstrapModelResults":
         """
-        Load bootstrap results from a SQLite database table.
+        Load bootstrap results from JSONL files. This is intended to be used with the
+        sigmoid bootstrap results.
 
-        Assumes:
-        - One row per bootstrap
-        - Coefficients are stored in named columns matching model_df.columns
-        - Columns include: 'bootstrap_idx', 'alpha', and model coefficients
-
-        :param sqlite_path: Path to the SQLite database file.
-        :param table_name: Name of the table containing bootstrap results.
-        :return: An instance of BootstrapModelResults.
+        :param db_path: Path to the directory containing the JSONL files for a given
+            regulator
+        :param bootstrap_results_table_name: Name of the JSONL file containing bootstrap
+            coefficient/final model results
+        :param mse_table_name: Name of the JSONL file containing fold-wise MSE results
+            by bootstrap_idx/alpha
+        :return: An instance of BootstrapModelResults
+        :raises FileNotFoundError: If the JSONL files do not exist.
 
         """
-        conn = sqlite3.connect(sqlite_path)
-        try:
-            df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
-        finally:
-            conn.close()
+        bootstrap_coef_results_path = os.path.join(
+            db_path, f"{bootstrap_results_table_name}.jsonl"
+        )
+        mse_path = os.path.join(db_path, f"{mse_table_name}.jsonl")
 
-        alpha_list = df["alpha"].tolist()
+        if not os.path.isfile(bootstrap_coef_results_path):
+            raise FileNotFoundError(
+                f"Results file not found: {bootstrap_coef_results_path}"
+            )
+        if not os.path.isfile(mse_path):
+            raise FileNotFoundError(f"Results file not found: {mse_path}")
 
-        non_coef_cols = {
-            "bootstrap_idx",
-            "alpha",
-            "final_training_score",
-            "left_asymptote",
-            "right_asymptote",
-        }
-        coef_cols = [col for col in df.columns if col not in non_coef_cols]
-        bootstrap_coefs_df = df[coef_cols].copy()
+        results_rows = []
+        with open(bootstrap_coef_results_path) as f:
+            for line in f:
+                try:
+                    results_rows.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+
+        if not results_rows:
+            raise ValueError("No valid records found in the results JSONL file.")
+
+        bootstrap_coef_results_df = pd.DataFrame(results_rows)
+
+        # Handle optional MSE file
+        mse_rows = []
+        with open(mse_path) as f:
+            for line in f:
+                try:
+                    mse_rows.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+        alpha_df = pd.DataFrame(mse_rows) if mse_rows else pd.DataFrame()
 
         return cls(
-            ci_dict={}, bootstrap_coefs_df=bootstrap_coefs_df, alpha_list=alpha_list
+            ci_dict={},
+            bootstrap_coefs_df=bootstrap_coef_results_df,
+            alpha_list=[],
+            alpha_df=alpha_df,
         )
 
 
